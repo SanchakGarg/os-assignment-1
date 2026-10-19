@@ -5,8 +5,28 @@
 
 int pick_fcfs(Process *p, int n, int t)
 {
-    /* TODO */
-    return -1;
+    int best = -1;
+
+    for (int i=0; i<n; i++) {
+        if (p[i].state != READY) continue;
+
+        if (best < 0) {
+            best = i;
+            continue;
+        }
+
+        if (p[i].arrival < p[best].arrival) {
+            best = i;
+        }
+        else if (
+            p[i].arrival == p[best].arrival &&
+            strcmp(p[i].id, p[best].id) < 0 // chose the one with lexicographically smaller id
+        ) {
+            best = i;
+
+        }
+    }
+    return best;
 }
 
 int pick_priority(Process *p, int n, int t)
