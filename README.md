@@ -49,6 +49,41 @@ lexicographically smaller process ID. This makes the scheduler deterministic for
 simultaneous arrivals while still preserving FCFS ordering for jobs that arrive
 at different times.
 
+### SJF scheduling behavior
+
+This project implements SJF (Shortest Job First) as a non-preemptive policy.
+Each time a chef becomes free, `pick_sjf` scans every process in the `READY`
+state and selects the one with the smallest `service` time, meaning the order
+that takes the least time to prepare. Ties are broken deterministically:
+
+1. shorter `service` time first
+2. then earlier `arrival` time
+3. then lexicographically smaller process ID (`strcmp`, so `O10` comes before `O2`)
+
+A few notes on it's design:
+
+- **Non-preemptive:** once a chef starts an order, it runs to completion. A
+  shorter order that arrives mid-preparation waits for the next free chef.
+- **Total service time, not remaining time:** the comparison uses `service`.
+  Since orders are never interrupted, `service` and `remaining` are equal at
+  every decision point, so the result is the same.
+- **Priority is ignored:** SJF looks only at preparation time, so a VIP order
+  with a long service time waits behind shorter normal orders.
+- **Ready set only:** `pick_sjf` considers only `READY` processes. The simulator
+  marks an order `READY` when it arrives, so the picker never sees future orders.
+
+On the sample input:
+
+| Algorithm | Avg waiting | Avg turnaround | Avg response |
+|---|---|---|---|
+| FCFS | 2.80 | 8.00 | 2.80 |
+| PRIORITY | 3.00 | 8.20 | 3.00 |
+| SJF | 2.40 | 7.60 | 2.40 |
+
+Trade-off: long orders can be delayed for as long as shorter ones keep arriving
+(starvation). In `tests/edge/starvation.txt`, order `O3` (service 20) waits 17
+time units under SJF, compared with 2 under FCFS.
+
 ### Gantt chart visualizer
 
 The repository also includes a terminal-based Gantt chart generator named
