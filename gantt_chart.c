@@ -1,27 +1,19 @@
 #include <dirent.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <unistd.h>
+#include "gantt.h"
 
-#define BAR_WIDTH 60
 #define MAX_JOBS 256
 #define MAX_FILES 256
 #define MAX_LINE 512
 
 typedef struct {
-    char id[32];
-    int start;
-    int end;
-} Job;
-
-typedef struct {
     char file_name[256];
     char algorithm[16];
-    Job jobs[MAX_JOBS];
+    GanttJob jobs[MAX_JOBS];
     int job_count;
     int min_time;
     int max_time;
@@ -87,20 +79,7 @@ static int list_test_files(const char *dir_path, char files[][256], int max_file
     return count;
 }
 
-static void sort_jobs(Job *jobs, int count)
-{
-    for (int i = 1; i < count; i++) {
-        Job key = jobs[i];
-        int j = i - 1;
-        while (j >= 0 && (jobs[j].start > key.start || (jobs[j].start == key.start && jobs[j].end > key.end))) {
-            jobs[j + 1] = jobs[j];
-            j--;
-        }
-        jobs[j + 1] = key;
-    }
-}
-
-static int parse_csv_job_line(char *line, Job *job)
+static int parse_csv_job_line(char *line, GanttJob *job)
 {
     char *fields[9];
     int field_count = 0;
@@ -174,7 +153,7 @@ static int collect_schedule(const char *input_file, const char *algorithm, Sched
             return 0;
         }
 
-        Job job;
+        GanttJob job;
         if (!parse_csv_job_line(line, &job)) {
             continue;
         }
@@ -199,81 +178,36 @@ static int collect_schedule(const char *input_file, const char *algorithm, Sched
     schedule->job_count = count;
     schedule->min_time = min_time;
     schedule->max_time = max_time;
-    sort_jobs(schedule->jobs, count);
+    gantt_sort_jobs(schedule->jobs, count);
     return 1;
 }
 
-static int color_for_job(const char *id)
+/* One block per input file: every algorithm shares a single time axis so the
+ * bars line up and the schedules can be compared directly. */
+static void print_file_block(const char *file_name, const Schedule *schedules, int count)
 {
-    static const int muted_palette[] = {
-        22,  24,  30,  58,
-        94, 101, 131, 167,
-        179, 243
-    };
-    unsigned long hash = 0;
+    int min_time = 0;
+    int max_time = 0;
 
-    for (const unsigned char *p = (const unsigned char *)id; *p; ++p) {
-        hash = hash * 131u + (unsigned long)(*p);
-    }
-
-    return muted_palette[(int)(hash % (sizeof(muted_palette) / sizeof(muted_palette[0])))];
-}
-
-static void print_timeline_axis(int min_time, int max_time)
-{
-    int span = max_time - min_time;
-    if (span <= 0) {
-        span = 1;
-    }
-
-    printf("      Time: %d -> %d\n", min_time, max_time);
-    printf("         ");
-    for (int i = 0; i < 10; i++) {
-        int tick = min_time + (span * i) / 10;
-        printf("%-6d", tick);
-    }
-    printf("%d\n", max_time);
-    printf("         ");
-    for (int i = 0; i < BAR_WIDTH; i++) putchar('-');
-    printf("\n");
-}
-
-static void print_schedule_chart(const Schedule *schedule)
-{
-    int span = schedule->max_time - schedule->min_time;
-    if (span <= 0) {
-        span = 1;
-    }
-
-    printf("\n=== %s :: %s ===\n", schedule->file_name, schedule->algorithm);
-    print_timeline_axis(schedule->min_time, schedule->max_time);
-
-    for (int i = 0; i < schedule->job_count; i++) {
-        const Job *job = &schedule->jobs[i];
-        int start_x = ((job->start - schedule->min_time) * BAR_WIDTH) / span;
-        int end_x = ((job->end - schedule->min_time) * BAR_WIDTH) / span;
-        int color = color_for_job(job->id);
-
-        if (end_x <= start_x) {
-            end_x = start_x + 1;
+    for (int s = 0; s < count; s++) {
+        if (schedules[s].max_time > max_time) {
+            max_time = schedules[s].max_time;
         }
-        if (end_x > BAR_WIDTH) {
-            end_x = BAR_WIDTH;
-        }
+    }
 
-        printf("%-8s |", job->id);
-        for (int x = 0; x < BAR_WIDTH; x++) {
-            if (x >= start_x && x < end_x) {
-                if (isatty(STDOUT_FILENO)) {
-                    printf("\033[38;5;%dm█\033[0m", color);
-                } else {
-                    printf("█");
-                }
-            } else {
-                printf(" ");
-            }
+    printf("\n=== %s ===\n", file_name);
+    gantt_print_axis(stdout, min_time, max_time);
+
+    for (int s = 0; s < count; s++) {
+        const Schedule *schedule = &schedules[s];
+
+        printf("[%s]\n", schedule->algorithm);
+        for (int i = 0; i < schedule->job_count; i++) {
+            gantt_print_bar(stdout, &schedule->jobs[i], min_time, max_time);
         }
-        printf("| %d-%d\n", job->start, job->end);
+        if (s < count - 1) {
+            gantt_print_rule(stdout);
+        }
     }
 }
 
@@ -281,28 +215,46 @@ int main(int argc, char **argv)
 {
     char files[MAX_FILES][256];
     const char *algorithms[] = {"FCFS", "PRIORITY", "SJF"};
-    const char *dir_path = "tests";
+    const char *path = "tests/edge";
+    struct stat st;
     int file_count = 0;
 
     if (argc > 1) {
-        dir_path = argv[1];
+        path = argv[1];
     }
-
-    printf("Gantt Chart Generator\n");
-    printf("Directory: %s\n\n", dir_path);
-
-    file_count = list_test_files(dir_path, files, MAX_FILES);
-    if (file_count <= 0) {
-        fprintf(stderr, "No .txt files found in %s\n", dir_path);
+    if (stat(path, &st) != 0) {
+        fprintf(stderr, "No such file or directory: %s\n", path);
         return 1;
     }
 
+    printf("Gantt Chart Generator\n");
+
+    if (S_ISDIR(st.st_mode)) {
+        printf("Directory: %s\n\n", path);
+        file_count = list_test_files(path, files, MAX_FILES);
+        if (file_count <= 0) {
+            fprintf(stderr, "No .txt files found in %s\n", path);
+            return 1;
+        }
+    } else {
+        printf("File: %s\n\n", path);
+        snprintf(files[0], sizeof(files[0]), "%s", path);
+        file_count = 1;
+    }
+
     for (int i = 0; i < file_count; i++) {
+        static Schedule schedules[3];
+        int collected = 0;
+
         for (int a = 0; a < 3; a++) {
-            Schedule schedule;
-            if (collect_schedule(files[i], algorithms[a], &schedule)) {
-                print_schedule_chart(&schedule);
+            if (collect_schedule(files[i], algorithms[a], &schedules[collected])) {
+                collected++;
             }
+        }
+        if (collected > 0) {
+            print_file_block(files[i], schedules, collected);
+        } else {
+            fprintf(stderr, "No schedule produced for %s\n", files[i]);
         }
     }
 

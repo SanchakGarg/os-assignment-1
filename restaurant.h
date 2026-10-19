@@ -17,7 +17,7 @@ typedef int (*Picker)(Process *p, int n, int t);
 
 int read_input(const char *file, Process *p, int *n, int *q);
 void simulate(Process *p, int n, Picker pick);
-void print_results(Process *p, int n);
+void print_results(Process *p, int n, int pretty, const char *file, const char *algorithm);
 
 int pick_fcfs(Process *p, int n, int t);
 int pick_priority(Process *p, int n, int t);
