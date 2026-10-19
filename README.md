@@ -18,8 +18,6 @@ Orders are processes, 2 chefs are the service units. Algorithms: FCFS, PRIORITY 
 | `tests/comparison.txt` | 10-order workload used for the [algorithm comparison](#algorithm-comparison) |
 | `tests/gantt_chart_test.sh` | Checks the Gantt chart generator |
 
-A `pick_*` function returns the index of the READY process to run next, or `-1` if none.
-
 ## Compile
 
 ```
@@ -44,6 +42,38 @@ sh tests/gantt_chart_test.sh    # Gantt chart generator checks
 ./gantt_chart tests/edge        # text Gantt charts, one block per input (all algorithms)
 ./gantt_chart tests/edge/starvation.txt  # Gantt chart for a single input file
 ```
+
+## Input format (parser)
+
+```
+N
+Q
+ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY
+```
+
+Example:
+
+```
+5
+2
+O1,0,2,8,NORMAL
+O2,1,1,4,VIP
+```
+
+`Q` (Round Robin quantum) is read but unused here. Smaller priority number = higher priority.
+
+## Output
+
+One row per process (sorted by ID), then `SUMMARY` with `AVERAGE_WAITING`, `AVERAGE_TURNAROUND`, `AVERAGE_RESPONSE`, `THROUGHPUT`, `UTILIZATION`.
+
+This CSV is what `restaurant` writes whenever its output is piped or redirected
+(for example `./restaurant tests/edge/all_same_time.txt FCFS > out.csv`). When run directly
+in a terminal it shows the same numbers as formatted tables — a results table
+and a summary box — followed by the Gantt chart.
+
+## Scheduling algorithms
+
+A `pick_*` function returns the index of the READY process to run next, or `-1` if none.
 
 ### FCFS scheduling behavior
 
@@ -111,7 +141,7 @@ Trade-off: long orders can be delayed for as long as shorter ones keep arriving
 (starvation). In `tests/edge/starvation.txt`, order `O3` (service 20) waits 17
 time units under SJF, compared with 2 under FCFS.
 
-### Gantt chart visualizer
+## Gantt chart visualizer
 
 When `./restaurant` is run in a terminal, it prints a Gantt chart for the chosen
 input file and algorithm after the `SUMMARY` block. When its output is piped or
@@ -241,31 +271,3 @@ O3       |                        █████████████       
 O9       |                                 ███████████████            | 15-22
 O5       |                                     ███████████████████████| 17-27
 ```
-
-## Input format (parser)
-
-```
-N
-Q
-ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY
-```
-
-Example:
-
-```
-5
-2
-O1,0,2,8,NORMAL
-O2,1,1,4,VIP
-```
-
-`Q` (Round Robin quantum) is read but unused here. Smaller priority number = higher priority.
-
-## Output
-
-One row per process (sorted by ID), then `SUMMARY` with `AVERAGE_WAITING`, `AVERAGE_TURNAROUND`, `AVERAGE_RESPONSE`, `THROUGHPUT`, `UTILIZATION`.
-
-This CSV is what `restaurant` writes whenever its output is piped or redirected
-(for example `./restaurant tests/edge/all_same_time.txt FCFS > out.csv`). When run directly
-in a terminal it shows the same numbers as formatted tables — a results table
-and a summary box — followed by the Gantt chart.
