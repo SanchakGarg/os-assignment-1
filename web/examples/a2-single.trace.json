@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "run": {
+    "id": "a2-single-demo",
+    "phase": "A2",
+    "scheduler": "FCFS",
+    "allocator": "FIRST_FIT",
+    "prevention_policy": "NONE",
+    "mode": "BASELINE",
+    "origin": "SYNTHETIC",
+    "status": "COMPLETE",
+    "time_unit": "virtual_tick",
+    "end_time": 2
+  },
+  "model": {
+    "chef_count": 2,
+    "pools": {"SPACE": 6, "TABLE": 3},
+    "processes": [
+      {"id": "O1", "arrival": 0, "priority": 2, "service": 2, "category": "NORMAL", "space_req": 2, "table_req": 1}
+    ],
+    "resources": []
+  },
+  "frames": [
+    {
+      "seq": 0, "time": 0,
+      "events": [
+        {"type": "ARRIVE", "process_id": "O1", "chef_id": null, "resource_id": null, "reason": "Order arrives"},
+        {"type": "MEMORY_ADMIT", "process_id": "O1", "chef_id": null, "resource_id": null, "reason": "Both pools have room"},
+        {"type": "DISPATCH", "process_id": "O1", "chef_id": 0, "resource_id": null, "reason": "Chef 1 starts cooking"}
+      ],
+      "processes": [{"id": "O1", "state": "RUNNING", "executed_service": 0, "remaining_service": 2, "chef_id": 0, "waiting_for": []}],
+      "chefs": ["O1", null],
+      "pools": {"SPACE": ["O1", "O1", null, null, null, null], "TABLE": ["O1", null, null]},
+      "queues": {"memory": [], "ready": [], "resource": {}},
+      "resources": []
+    },
+    {
+      "seq": 1, "time": 2,
+      "events": [{"type": "COMPLETE", "process_id": "O1", "chef_id": 0, "resource_id": null, "reason": "Order complete; slots released"}],
+      "processes": [{"id": "O1", "state": "TERMINATED", "executed_service": 2, "remaining_service": 0, "chef_id": null, "waiting_for": []}],
+      "chefs": [null, null],
+      "pools": {"SPACE": [null, null, null, null, null, null], "TABLE": [null, null, null]},
+      "queues": {"memory": [], "ready": [], "resource": {}},
+      "resources": []
+    }
+  ],
+  "results": {
+    "processes": [{"id": "O1", "arrival": 0, "priority": 2, "service": 2, "start": 0, "completion": 2, "waiting": 0, "turnaround": 2, "response": 0, "mem_admit": 0, "mem_wait": 0, "ready_wait": 0, "resource_wait": 0}],
+    "summary": {"average_waiting": 0, "average_turnaround": 2, "average_response": 0, "throughput": 0.5, "service_utilization_pct": 50, "average_memory_wait": 0, "completed_count": 1, "blocked_for_memory_count": 0},
+    "pools": [
+      {"id": "SPACE", "capacity": 6, "peak_occupied": 2, "utilization_pct": 33.3333333333, "max_ext_frag_slots": 0},
+      {"id": "TABLE", "capacity": 3, "peak_occupied": 1, "utilization_pct": 33.3333333333, "max_ext_frag_slots": 0}
+    ],
+    "resources": [],
+    "checks": null
+  },
+  "worker_evidence": []
+}

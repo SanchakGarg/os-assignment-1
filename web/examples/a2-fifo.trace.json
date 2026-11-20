@@ -1,0 +1,456 @@
+{
+  "schema_version": 1,
+  "run": {
+    "id": "a2-fifo-demo",
+    "phase": "A2",
+    "scheduler": "FCFS",
+    "allocator": "FIRST_FIT",
+    "prevention_policy": "NONE",
+    "mode": "BASELINE",
+    "origin": "SYNTHETIC",
+    "status": "COMPLETE",
+    "time_unit": "virtual_tick",
+    "end_time": 8
+  },
+  "model": {
+    "chef_count": 2,
+    "pools": {
+      "SPACE": 6,
+      "TABLE": 3
+    },
+    "processes": [
+      {
+        "id": "O1",
+        "arrival": 0,
+        "priority": 2,
+        "service": 6,
+        "category": "NORMAL",
+        "space_req": 4,
+        "table_req": 2
+      },
+      {
+        "id": "O2",
+        "arrival": 0,
+        "priority": 1,
+        "service": 2,
+        "category": "VIP",
+        "space_req": 4,
+        "table_req": 2
+      },
+      {
+        "id": "O3",
+        "arrival": 1,
+        "priority": 3,
+        "service": 2,
+        "category": "NORMAL",
+        "space_req": 1,
+        "table_req": 0
+      }
+    ],
+    "resources": []
+  },
+  "frames": [
+    {
+      "seq": 0,
+      "time": 0,
+      "events": [
+        {
+          "type": "ARRIVE",
+          "process_id": "O1",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Order arrives"
+        },
+        {
+          "type": "ARRIVE",
+          "process_id": "O2",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Order arrives"
+        },
+        {
+          "type": "MEMORY_ADMIT",
+          "process_id": "O1",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Four SPACE and two TABLE slots"
+        },
+        {
+          "type": "MEMORY_BLOCK",
+          "process_id": "O2",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "FIFO head cannot fit both pools"
+        },
+        {
+          "type": "DISPATCH",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "Chef 1 starts cooking"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "RUNNING",
+          "executed_service": 0,
+          "remaining_service": 6,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "NEW",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O1",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O1",
+          "O1",
+          "O1",
+          "O1",
+          null,
+          null
+        ],
+        "TABLE": [
+          "O1",
+          "O1",
+          null
+        ]
+      },
+      "queues": {
+        "memory": [
+          "O2"
+        ],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": []
+    },
+    {
+      "seq": 1,
+      "time": 1,
+      "events": [
+        {
+          "type": "ARRIVE",
+          "process_id": "O3",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Order arrives"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "RUNNING",
+          "executed_service": 1,
+          "remaining_service": 5,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O1",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O1",
+          "O1",
+          "O1",
+          "O1",
+          null,
+          null
+        ],
+        "TABLE": [
+          "O1",
+          "O1",
+          null
+        ]
+      },
+      "queues": {
+        "memory": [
+          "O2",
+          "O3"
+        ],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": []
+    },
+    {
+      "seq": 2,
+      "time": 6,
+      "events": [
+        {
+          "type": "COMPLETE",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "Order complete; allocations released"
+        },
+        {
+          "type": "MEMORY_ADMIT",
+          "process_id": "O2",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "FIFO head admitted"
+        },
+        {
+          "type": "MEMORY_ADMIT",
+          "process_id": "O3",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Next FIFO request fits"
+        },
+        {
+          "type": "DISPATCH",
+          "process_id": "O2",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "Priority 1"
+        },
+        {
+          "type": "DISPATCH",
+          "process_id": "O3",
+          "chef_id": 1,
+          "resource_id": null,
+          "reason": "Chef 2 is free"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "TERMINATED",
+          "executed_service": 6,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "RUNNING",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "RUNNING",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": 1,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O2",
+        "O3"
+      ],
+      "pools": {
+        "SPACE": [
+          "O2",
+          "O2",
+          "O2",
+          "O2",
+          "O3",
+          null
+        ],
+        "TABLE": [
+          "O2",
+          "O2",
+          null
+        ]
+      },
+      "queues": {
+        "memory": [],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": []
+    },
+    {
+      "seq": 3,
+      "time": 8,
+      "events": [
+        {
+          "type": "COMPLETE",
+          "process_id": "O2",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "Order complete"
+        },
+        {
+          "type": "COMPLETE",
+          "process_id": "O3",
+          "chef_id": 1,
+          "resource_id": null,
+          "reason": "Order complete"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "TERMINATED",
+          "executed_service": 6,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "TERMINATED",
+          "executed_service": 2,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "TERMINATED",
+          "executed_service": 2,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        null,
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          null,
+          null,
+          null
+        ]
+      },
+      "queues": {
+        "memory": [],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": []
+    }
+  ],
+  "results": {
+    "processes": [
+      {
+        "id": "O1",
+        "arrival": 0,
+        "priority": 2,
+        "service": 6,
+        "start": 0,
+        "completion": 6,
+        "waiting": 0,
+        "turnaround": 6,
+        "response": 0,
+        "mem_admit": 0,
+        "mem_wait": 0,
+        "ready_wait": 0,
+        "resource_wait": 0
+      },
+      {
+        "id": "O2",
+        "arrival": 0,
+        "priority": 1,
+        "service": 2,
+        "start": 6,
+        "completion": 8,
+        "waiting": 6,
+        "turnaround": 8,
+        "response": 6,
+        "mem_admit": 6,
+        "mem_wait": 6,
+        "ready_wait": 0,
+        "resource_wait": 0
+      },
+      {
+        "id": "O3",
+        "arrival": 1,
+        "priority": 3,
+        "service": 2,
+        "start": 6,
+        "completion": 8,
+        "waiting": 5,
+        "turnaround": 7,
+        "response": 5,
+        "mem_admit": 6,
+        "mem_wait": 5,
+        "ready_wait": 0,
+        "resource_wait": 0
+      }
+    ],
+    "summary": {
+      "average_waiting": 3.6666666667,
+      "average_turnaround": 7,
+      "average_response": 3.6666666667,
+      "throughput": 0.375,
+      "service_utilization_pct": 62.5,
+      "average_memory_wait": 3.6666666667,
+      "completed_count": 3,
+      "blocked_for_memory_count": 2
+    },
+    "pools": [
+      {
+        "id": "SPACE",
+        "capacity": 6,
+        "peak_occupied": 4,
+        "utilization_pct": 70.8333333333,
+        "max_ext_frag_slots": 0
+      },
+      {
+        "id": "TABLE",
+        "capacity": 3,
+        "peak_occupied": 2,
+        "utilization_pct": 66.6666666667,
+        "max_ext_frag_slots": 0
+      }
+    ],
+    "resources": [],
+    "checks": null
+  },
+  "worker_evidence": []
+}

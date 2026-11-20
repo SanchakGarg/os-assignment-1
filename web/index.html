@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#153a35">
+  <title>Last Call — Restaurant Simulator</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#home" aria-label="Last Call home"><span class="brand-mark">✳</span><span>last call<span class="brand-dot">.</span></span></a>
+    <span class="top-note">a tiny restaurant, a lot to keep track of</span>
+    <span class="live-chip"><span></span> RECORDED SIMULATION</span>
+  </header>
+
+  <main id="app">
+    <section id="welcome" class="welcome">
+      <div class="welcome-copy">
+        <span class="eyebrow">THE DINNER RUSH, EXPLAINED</span>
+        <h1>Every order has<br>a place <em>in line.</em></h1>
+        <p>Pick a simulation recording and watch two chefs juggle orders, space and kitchen gear. Scrub through the rush. See where every order waits.</p>
+        <div class="welcome-actions">
+          <label class="primary-button upload-button">Open a recording<input id="file-input" type="file" accept=".json,.txt,application/json,text/plain" multiple></label>
+          <span class="or-label">or try an example</span>
+        </div>
+        <div id="example-list" class="example-list" aria-label="Example simulations"></div>
+        <p class="file-hint">Choose a JSON simulation trace. A raw assignment input needs to be run through the C simulator first.</p>
+      </div>
+      <div class="welcome-art" aria-hidden="true">
+        <div class="sun"></div><div class="art-window"><span></span><span></span><span></span><span></span></div>
+        <div class="shelf"><i>✿</i><i>▧</i><i>✿</i></div>
+        <div class="counter"></div><div class="chef chef-one"><b>●</b><i></i></div><div class="chef chef-two"><b>●</b><i></i></div>
+        <div class="pot"><span>♨</span></div><div class="order-ticket">O1 <small>IN THE OVEN</small></div>
+        <div class="art-caption">TONIGHT'S SPECIAL <b>good timing</b></div>
+      </div>
+    </section>
+
+    <section id="simulator" class="simulator hidden" aria-label="Simulation viewer">
+      <div class="sim-heading">
+        <div><button id="back-button" class="back-button">← All cases</button><div class="title-row"><h1 id="run-title">Dinner service</h1><span id="origin-badge" class="origin-badge">SYNTHETIC EXAMPLE</span></div><p id="run-meta" class="run-meta"></p></div>
+        <div class="header-buttons"><button id="load-more" class="secondary-button">＋ Load another</button><label class="icon-button" title="Download this trace">↓<input id="download-input" type="button" hidden></label></div>
+      </div>
+      <div class="sim-grid">
+        <section class="scene-card card">
+          <div class="card-heading"><div><span class="eyebrow">THE FLOOR</span><h2>Kitchen cam</h2></div><span id="time-chip" class="time-chip">TICK 0</span></div>
+          <div class="restaurant-scene" id="restaurant-scene">
+            <div class="scene-label label-pass">PICKUP PASS</div><div class="scene-label label-kitchen">KITCHEN</div>
+            <div class="pass-shelf"><span>○</span><span>○</span><span>○</span></div>
+            <div class="wall-tile tile-a"></div><div class="wall-tile tile-b"></div>
+            <div class="kitchen-counter"></div>
+            <div class="appliances" id="appliances"></div>
+            <div class="chef-station station-one"><span class="station-name">CHEF 01</span><div id="chef-0" class="chef-token"><span class="chef-hat">✦</span><span class="chef-face">●</span><span class="chef-apron">O1</span></div><span id="chef-status-0" class="station-status">AT THE PASS</span></div>
+            <div class="chef-station station-two"><span class="station-name">CHEF 02</span><div id="chef-1" class="chef-token chef-alt"><span class="chef-hat">✦</span><span class="chef-face">●</span><span class="chef-apron">—</span></div><span id="chef-status-1" class="station-status">AT THE PASS</span></div>
+            <div class="tables-area"><span class="area-label">TABLES</span><div id="table-art" class="tables-art"></div></div>
+            <div class="queue-area"><span class="area-label">WAITING FOR A CHEF</span><div id="queue-tokens" class="queue-tokens"></div></div>
+            <div class="door"><span>IN</span><i>↘</i></div><div class="plant plant-one">♣</div><div class="plant plant-two">♣</div>
+          </div>
+          <div class="legend"><span><i class="dot dot-cooking"></i>Cooking</span><span><i class="dot dot-ready"></i>Ready</span><span><i class="dot dot-waiting"></i>Waiting</span><span><i class="dot dot-done"></i>Served</span></div>
+        </section>
+
+        <aside class="side-column">
+          <section class="card orders-card"><div class="card-heading"><div><span class="eyebrow">THE TICKETS</span><h2>Orders <span id="order-count" class="count-pill">0</span></h2></div><button id="sort-button" class="text-button" title="Toggle order sorting">BY ARRIVAL ↕</button></div><div id="order-list" class="order-list"></div></section>
+          <section class="card event-card"><div class="card-heading"><div><span class="eyebrow">FROM THE PASS</span><h2>What just happened</h2></div></div><div id="event-list" class="event-list"></div></section>
+        </aside>
+
+        <section class="card memory-card"><div class="card-heading"><div><span class="eyebrow">A2 · CONTIGUOUS ALLOCATION</span><h2>Restaurant space</h2></div><span class="micro-note">slots stay reserved until an order is done</span></div><div id="memory-pools" class="memory-pools"></div></section>
+        <section class="card equipment-card"><div class="card-heading"><div><span class="eyebrow">A3 · SHARED EQUIPMENT</span><h2>Kitchen gear</h2></div><span id="resource-summary" class="micro-note"></span></div><div id="resource-list" class="resource-list"></div><div id="worker-evidence" class="worker-evidence hidden"></div></section>
+      </div>
+
+      <section class="card playback-card">
+        <div class="playback-top"><div class="time-readout"><span class="eyebrow">SIMULATION TIME</span><strong id="time-display">00</strong><span class="time-unit">TICKS</span></div><div class="playback-controls"><button id="restart-button" class="control-button" aria-label="Restart" title="Restart">↺</button><button id="step-back-button" class="control-button" aria-label="Previous frame" title="Previous frame">←</button><button id="play-button" class="play-button" aria-label="Play">▶</button><button id="step-button" class="control-button" aria-label="Next frame" title="Next frame">→</button><button id="speed-button" class="speed-button" title="Change playback speed">1×</button></div><span id="frame-count" class="frame-count">FRAME 1 / 1</span></div>
+        <input id="timeline" class="timeline" type="range" min="0" max="0" value="0" aria-label="Simulation frame">
+        <div class="timeline-labels"><span>ORDER OF EVENTS</span><span id="timeline-end">END OF SERVICE</span></div>
+      </section>
+      <section class="results-strip"><div class="results-title"><span class="eyebrow">AFTER THE RUSH</span><strong>Run results</strong></div><div id="summary-stats" class="summary-stats"></div><button id="save-button" class="secondary-button save-button">↓ Save recording</button></section>
+    </section>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="case-modal" class="modal-backdrop hidden"><section class="case-modal card"><div class="card-heading"><div><span class="eyebrow">PICK A RECORDING</span><h2>Your dinner services</h2></div><button id="close-modal" class="control-button" aria-label="Close">×</button></div><div id="case-list" class="case-list"></div><label class="secondary-button upload-button modal-upload">＋ Open files<input id="modal-file-input" type="file" accept=".json,.txt,application/json,text/plain" multiple></label></section></div>
+  </main>
+  <footer><span>LAST CALL <i>✳</i> OS LAB · SMART RESTAURANT</span><span>All times are virtual ticks. All rushes are a recording.</span></footer>
+</body>
+</html>
