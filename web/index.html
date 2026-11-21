@@ -6,57 +6,22 @@
   <meta name="theme-color" content="#153a35">
   <title>Last Call — Restaurant Simulator</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="examples.js" defer></script>
   <script src="app.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#home" aria-label="Last Call home"><span class="brand-mark">✳</span><span>last call<span class="brand-dot">.</span></span></a>
-    <span class="top-note">a tiny restaurant, a lot to keep track of</span>
-    <span class="live-chip"><span></span> RECORDED SIMULATION</span>
-  </header>
-
   <main id="app">
-    <section id="welcome" class="welcome">
-      <div class="welcome-copy">
-        <span class="eyebrow">THE DINNER RUSH, EXPLAINED</span>
-        <h1>Every order has<br>a place <em>in line.</em></h1>
-        <p>Pick a simulation recording and watch two chefs juggle orders, space and kitchen gear. Scrub through the rush. See where every order waits.</p>
-        <div class="welcome-actions">
-          <label class="primary-button upload-button">Open a recording<input id="file-input" type="file" accept=".json,.txt,application/json,text/plain" multiple></label>
-          <span class="or-label">or try an example</span>
-        </div>
-        <div id="example-list" class="example-list" aria-label="Example simulations"></div>
-        <p class="file-hint">Choose a JSON simulation trace. A raw assignment input needs to be run through the C simulator first.</p>
-      </div>
-      <div class="welcome-art" aria-hidden="true">
-        <div class="sun"></div><div class="art-window"><span></span><span></span><span></span><span></span></div>
-        <div class="shelf"><i>✿</i><i>▧</i><i>✿</i></div>
-        <div class="counter"></div><div class="chef chef-one"><b>●</b><i></i></div><div class="chef chef-two"><b>●</b><i></i></div>
-        <div class="pot"><span>♨</span></div><div class="order-ticket">O1 <small>IN THE OVEN</small></div>
-        <div class="art-caption">TONIGHT'S SPECIAL <b>good timing</b></div>
-      </div>
-    </section>
+    <section id="welcome" class="welcome hidden"><label class="primary-button upload-button">Open a recording<input id="file-input" type="file" accept=".json,.txt,application/json,text/plain" multiple></label><div id="example-list" class="example-list" aria-label="Example simulations"></div></section>
 
-    <section id="simulator" class="simulator hidden" aria-label="Simulation viewer">
+    <section id="simulator" class="simulator" aria-label="Simulation viewer">
       <div class="sim-heading">
-        <div><button id="back-button" class="back-button">← All cases</button><div class="title-row"><h1 id="run-title">Dinner service</h1><span id="origin-badge" class="origin-badge">SYNTHETIC EXAMPLE</span></div><p id="run-meta" class="run-meta"></p></div>
-        <div class="header-buttons"><button id="load-more" class="secondary-button">＋ Load another</button><label class="icon-button" title="Download this trace">↓<input id="download-input" type="button" hidden></label></div>
+        <div class="title-row"><h1 id="run-title">Dinner service</h1><span id="origin-badge" class="origin-badge">SYNTHETIC EXAMPLE</span><span id="run-meta" class="run-meta"></span></div>
+        <div class="header-buttons"><button id="load-more" class="menu-button">☰ MENU</button></div>
       </div>
       <div class="sim-grid">
         <section class="scene-card card">
           <div class="card-heading"><div><span class="eyebrow">THE FLOOR</span><h2>Kitchen cam</h2></div><span id="time-chip" class="time-chip">TICK 0</span></div>
-          <div class="restaurant-scene" id="restaurant-scene">
-            <div class="scene-label label-pass">PICKUP PASS</div><div class="scene-label label-kitchen">KITCHEN</div>
-            <div class="pass-shelf"><span>○</span><span>○</span><span>○</span></div>
-            <div class="wall-tile tile-a"></div><div class="wall-tile tile-b"></div>
-            <div class="kitchen-counter"></div>
-            <div class="appliances" id="appliances"></div>
-            <div class="chef-station station-one"><span class="station-name">CHEF 01</span><div id="chef-0" class="chef-token"><span class="chef-hat">✦</span><span class="chef-face">●</span><span class="chef-apron">O1</span></div><span id="chef-status-0" class="station-status">AT THE PASS</span></div>
-            <div class="chef-station station-two"><span class="station-name">CHEF 02</span><div id="chef-1" class="chef-token chef-alt"><span class="chef-hat">✦</span><span class="chef-face">●</span><span class="chef-apron">—</span></div><span id="chef-status-1" class="station-status">AT THE PASS</span></div>
-            <div class="tables-area"><span class="area-label">TABLES</span><div id="table-art" class="tables-art"></div></div>
-            <div class="queue-area"><span class="area-label">WAITING FOR A CHEF</span><div id="queue-tokens" class="queue-tokens"></div></div>
-            <div class="door"><span>IN</span><i>↘</i></div><div class="plant plant-one">♣</div><div class="plant plant-two">♣</div>
-          </div>
+          <div class="restaurant-scene"><canvas id="game-canvas" aria-label="Pixel-art top-down restaurant. Order names and states are also listed below."></canvas></div>
           <div class="legend"><span><i class="dot dot-cooking"></i>Cooking</span><span><i class="dot dot-ready"></i>Ready</span><span><i class="dot dot-waiting"></i>Waiting</span><span><i class="dot dot-done"></i>Served</span></div>
         </section>
 
@@ -78,8 +43,7 @@
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <div id="case-modal" class="modal-backdrop hidden"><section class="case-modal card"><div class="card-heading"><div><span class="eyebrow">PICK A RECORDING</span><h2>Your dinner services</h2></div><button id="close-modal" class="control-button" aria-label="Close">×</button></div><div id="case-list" class="case-list"></div><label class="secondary-button upload-button modal-upload">＋ Open files<input id="modal-file-input" type="file" accept=".json,.txt,application/json,text/plain" multiple></label></section></div>
+    <div id="case-modal" class="modal-backdrop hidden"><section class="case-modal card"><div class="card-heading"><h2>Choose a recording</h2><button id="close-modal" class="control-button" aria-label="Close">×</button></div><div id="case-list" class="case-list"></div><label class="secondary-button upload-button modal-upload">＋ Open recording<input id="modal-file-input" type="file" accept=".json,.txt,application/json,text/plain" multiple></label></section></div>
   </main>
-  <footer><span>LAST CALL <i>✳</i> OS LAB · SMART RESTAURANT</span><span>All times are virtual ticks. All rushes are a recording.</span></footer>
 </body>
 </html>

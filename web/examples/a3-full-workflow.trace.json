@@ -1,0 +1,1063 @@
+{
+  "schema_version": 1,
+  "run": {
+    "id": "Full workflow \u00b7 A3 kitchen rush",
+    "phase": "A3",
+    "scheduler": "PRIORITY",
+    "allocator": "FIRST_FIT",
+    "prevention_policy": "GLOBAL_ORDER",
+    "mode": "SAFE",
+    "origin": "SYNTHETIC",
+    "status": "COMPLETE",
+    "time_unit": "virtual_tick",
+    "end_time": 7
+  },
+  "model": {
+    "chef_count": 2,
+    "pools": {
+      "SPACE": 6,
+      "TABLE": 3
+    },
+    "processes": [
+      {
+        "id": "O1",
+        "arrival": 0,
+        "priority": 2,
+        "service": 4,
+        "category": "NORMAL",
+        "space_req": 3,
+        "table_req": 1
+      },
+      {
+        "id": "O2",
+        "arrival": 1,
+        "priority": 1,
+        "service": 3,
+        "category": "VIP",
+        "space_req": 3,
+        "table_req": 2
+      },
+      {
+        "id": "O3",
+        "arrival": 2,
+        "priority": 3,
+        "service": 2,
+        "category": "NORMAL",
+        "space_req": 1,
+        "table_req": 0
+      }
+    ],
+    "resources": [
+      {
+        "id": "MICROWAVE",
+        "capacity": 1
+      },
+      {
+        "id": "OVEN_1",
+        "capacity": 1
+      },
+      {
+        "id": "OVEN_2",
+        "capacity": 1
+      },
+      {
+        "id": "COFFEE_MACHINE",
+        "capacity": 1
+      }
+    ]
+  },
+  "frames": [
+    {
+      "seq": 0,
+      "time": 0,
+      "events": [
+        {
+          "type": "ARRIVE",
+          "process_id": "O1",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "First order arrives"
+        },
+        {
+          "type": "MEMORY_ADMIT",
+          "process_id": "O1",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Reserves three space slots and one table"
+        },
+        {
+          "type": "DISPATCH",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "Chef 1 starts the VIP-free order"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "RUNNING",
+          "executed_service": 0,
+          "remaining_service": 4,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "NEW",
+          "executed_service": 0,
+          "remaining_service": 3,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "NEW",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O1",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O1",
+          "O1",
+          "O1",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O1",
+          null,
+          null
+        ]
+      },
+      "queues": {
+        "memory": [],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 1,
+      "time": 1,
+      "events": [
+        {
+          "type": "ARRIVE",
+          "process_id": "O2",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Second order arrives"
+        },
+        {
+          "type": "MEMORY_BLOCK",
+          "process_id": "O2",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "FIFO head needs three adjacent space slots"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "RUNNING",
+          "executed_service": 1,
+          "remaining_service": 3,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 3,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "NEW",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O1",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O1",
+          "O1",
+          "O1",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O1",
+          null,
+          null
+        ]
+      },
+      "queues": {
+        "memory": [
+          "O2"
+        ],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 2,
+      "time": 2,
+      "events": [
+        {
+          "type": "ARRIVE",
+          "process_id": "O3",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Small order arrives"
+        },
+        {
+          "type": "MEMORY_BLOCK",
+          "process_id": "O3",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Waits behind the FIFO head"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "RUNNING",
+          "executed_service": 2,
+          "remaining_service": 2,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 3,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O1",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O1",
+          "O1",
+          "O1",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O1",
+          null,
+          null
+        ]
+      },
+      "queues": {
+        "memory": [
+          "O2",
+          "O3"
+        ],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 3,
+      "time": 2,
+      "events": [
+        {
+          "type": "RESOURCE_ACQUIRE",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": "MICROWAVE",
+          "reason": "Chef 1 warms the dish"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "RUNNING",
+          "executed_service": 2,
+          "remaining_service": 2,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 3,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O1",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O1",
+          "O1",
+          "O1",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O1",
+          null,
+          null
+        ]
+      },
+      "queues": {
+        "memory": [
+          "O2",
+          "O3"
+        ],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": "O1",
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 4,
+      "time": 3,
+      "events": [
+        {
+          "type": "RESOURCE_ACQUIRE",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": "OVEN_1",
+          "reason": "Order enters oven 1"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "RUNNING",
+          "executed_service": 3,
+          "remaining_service": 1,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 3,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "BLOCKED_MEMORY",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O1",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O1",
+          "O1",
+          "O1",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O1",
+          null,
+          null
+        ]
+      },
+      "queues": {
+        "memory": [
+          "O2",
+          "O3"
+        ],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": "O1",
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": "O1",
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 5,
+      "time": 4,
+      "events": [
+        {
+          "type": "RESOURCE_RELEASE",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": "MICROWAVE",
+          "reason": "Microwave is free"
+        },
+        {
+          "type": "RESOURCE_RELEASE",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": "OVEN_1",
+          "reason": "Oven 1 is free"
+        },
+        {
+          "type": "COMPLETE",
+          "process_id": "O1",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "Order complete; both pools released"
+        },
+        {
+          "type": "MEMORY_ADMIT",
+          "process_id": "O2",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "FIFO head now gets both pools"
+        },
+        {
+          "type": "MEMORY_ADMIT",
+          "process_id": "O3",
+          "chef_id": null,
+          "resource_id": null,
+          "reason": "Next order is admitted"
+        },
+        {
+          "type": "DISPATCH",
+          "process_id": "O2",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "Priority chooses O2"
+        },
+        {
+          "type": "DISPATCH",
+          "process_id": "O3",
+          "chef_id": 1,
+          "resource_id": null,
+          "reason": "Second chef starts O3"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "TERMINATED",
+          "executed_service": 4,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "RUNNING",
+          "executed_service": 0,
+          "remaining_service": 3,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "RUNNING",
+          "executed_service": 0,
+          "remaining_service": 2,
+          "chef_id": 1,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O2",
+        "O3"
+      ],
+      "pools": {
+        "SPACE": [
+          "O2",
+          "O2",
+          "O2",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O2",
+          "O2",
+          null
+        ]
+      },
+      "queues": {
+        "memory": [],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 6,
+      "time": 5,
+      "events": [
+        {
+          "type": "RESOURCE_ACQUIRE",
+          "process_id": "O2",
+          "chef_id": 0,
+          "resource_id": "OVEN_1",
+          "reason": "O2 starts using oven 1"
+        },
+        {
+          "type": "RESOURCE_ACQUIRE",
+          "process_id": "O3",
+          "chef_id": 1,
+          "resource_id": "OVEN_2",
+          "reason": "O3 uses the independent second oven"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "TERMINATED",
+          "executed_service": 4,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "RUNNING",
+          "executed_service": 1,
+          "remaining_service": 2,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "RUNNING",
+          "executed_service": 1,
+          "remaining_service": 1,
+          "chef_id": 1,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O2",
+        "O3"
+      ],
+      "pools": {
+        "SPACE": [
+          "O2",
+          "O2",
+          "O2",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O2",
+          "O2",
+          null
+        ]
+      },
+      "queues": {
+        "memory": [],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": "O2",
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": "O3",
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 7,
+      "time": 6,
+      "events": [
+        {
+          "type": "COMPLETE",
+          "process_id": "O3",
+          "chef_id": 1,
+          "resource_id": null,
+          "reason": "O3 served; oven 2 released"
+        },
+        {
+          "type": "RESOURCE_RELEASE",
+          "process_id": "O3",
+          "chef_id": 1,
+          "resource_id": "OVEN_2",
+          "reason": "Oven 2 is free"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "TERMINATED",
+          "executed_service": 4,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "RUNNING",
+          "executed_service": 2,
+          "remaining_service": 1,
+          "chef_id": 0,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "TERMINATED",
+          "executed_service": 2,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        "O2",
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          "O2",
+          "O2",
+          "O2",
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          "O2",
+          "O2",
+          null
+        ]
+      },
+      "queues": {
+        "memory": [],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": "O2",
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    },
+    {
+      "seq": 8,
+      "time": 7,
+      "events": [
+        {
+          "type": "COMPLETE",
+          "process_id": "O2",
+          "chef_id": 0,
+          "resource_id": null,
+          "reason": "All orders served; oven and slots released"
+        }
+      ],
+      "processes": [
+        {
+          "id": "O1",
+          "state": "TERMINATED",
+          "executed_service": 4,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O2",
+          "state": "TERMINATED",
+          "executed_service": 3,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        },
+        {
+          "id": "O3",
+          "state": "TERMINATED",
+          "executed_service": 2,
+          "remaining_service": 0,
+          "chef_id": null,
+          "waiting_for": []
+        }
+      ],
+      "chefs": [
+        null,
+        null
+      ],
+      "pools": {
+        "SPACE": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "TABLE": [
+          null,
+          null,
+          null
+        ]
+      },
+      "queues": {
+        "memory": [],
+        "ready": [],
+        "resource": {}
+      },
+      "resources": [
+        {
+          "id": "MICROWAVE",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_1",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "OVEN_2",
+          "holder": null,
+          "waiters": []
+        },
+        {
+          "id": "COFFEE_MACHINE",
+          "holder": null,
+          "waiters": []
+        }
+      ]
+    }
+  ],
+  "results": {
+    "processes": [
+      {
+        "id": "O1",
+        "arrival": 0,
+        "priority": 2,
+        "service": 4,
+        "start": 0,
+        "completion": 4,
+        "waiting": 0,
+        "turnaround": 4,
+        "response": 0,
+        "mem_admit": 0,
+        "mem_wait": 0,
+        "ready_wait": 0,
+        "resource_wait": 0
+      },
+      {
+        "id": "O2",
+        "arrival": 1,
+        "priority": 1,
+        "service": 3,
+        "start": 4,
+        "completion": 7,
+        "waiting": 3,
+        "turnaround": 6,
+        "response": 3,
+        "mem_admit": 4,
+        "mem_wait": 3,
+        "ready_wait": 0,
+        "resource_wait": 0
+      },
+      {
+        "id": "O3",
+        "arrival": 2,
+        "priority": 3,
+        "service": 2,
+        "start": 4,
+        "completion": 6,
+        "waiting": 2,
+        "turnaround": 4,
+        "response": 2,
+        "mem_admit": 4,
+        "mem_wait": 2,
+        "ready_wait": 0,
+        "resource_wait": 0
+      }
+    ],
+    "summary": {
+      "average_waiting": 1.6666667,
+      "average_turnaround": 4.6666667,
+      "average_response": 1.6666667,
+      "throughput": 0.4285714,
+      "service_utilization_pct": 64.2857143,
+      "average_memory_wait": 1.6666667,
+      "completed_count": 3,
+      "blocked_for_memory_count": 2
+    },
+    "pools": [
+      {
+        "id": "SPACE",
+        "capacity": 6,
+        "peak_occupied": 3,
+        "utilization_pct": 42.8571429,
+        "max_ext_frag_slots": 0
+      },
+      {
+        "id": "TABLE",
+        "capacity": 3,
+        "peak_occupied": 2,
+        "utilization_pct": 19.047619,
+        "max_ext_frag_slots": 0
+      }
+    ],
+    "resources": [
+      {
+        "id": "MICROWAVE",
+        "capacity": 1,
+        "max_simultaneous_holders": 1,
+        "acquisitions": 1,
+        "wait_events": 0
+      },
+      {
+        "id": "OVEN_1",
+        "capacity": 1,
+        "max_simultaneous_holders": 1,
+        "acquisitions": 1,
+        "wait_events": 0
+      },
+      {
+        "id": "OVEN_2",
+        "capacity": 1,
+        "max_simultaneous_holders": 1,
+        "acquisitions": 1,
+        "wait_events": 0
+      },
+      {
+        "id": "COFFEE_MACHINE",
+        "capacity": 1,
+        "max_simultaneous_holders": 1,
+        "acquisitions": 1,
+        "wait_events": 0
+      }
+    ],
+    "checks": {
+      "exclusivity_violations": 0,
+      "unresolved_deadlocks": 0,
+      "completed_count": 3
+    }
+  },
+  "worker_evidence": [
+    {
+      "seq": 0,
+      "worker_id": "worker-1",
+      "process_id": "O1",
+      "action": "ACQUIRE",
+      "resource_id": "MICROWAVE",
+      "wall_start_ns": 100,
+      "wall_end_ns": 180,
+      "outcome": "GRANTED"
+    },
+    {
+      "seq": 1,
+      "worker_id": "worker-2",
+      "process_id": "O3",
+      "action": "ACQUIRE",
+      "resource_id": "OVEN_2",
+      "wall_start_ns": 130,
+      "wall_end_ns": 190,
+      "outcome": "GRANTED"
+    }
+  ]
+}
