@@ -6,6 +6,7 @@ Orders are processes and 2 chefs are the service units. Schedulers: FCFS, PRIORI
 
 ```
 src/        the simulator
+server/     C++ WebSocket backend for the web simulator
 tools/      helper programs (gantt_chart, check_input)
 tests/a1/   A1 edge cases, expected rows, comparison workload, Gantt test
 tests/a2/   A2 unit tests, valid/invalid inputs, edge cases, comparison workload
@@ -33,6 +34,8 @@ docs/       input/output notes, edge-case notes, final-project samples
 | `scripts/run_comparison.sh` | Runs all 9 scheduler × allocator combinations and prints a table |
 | `docs/input-output.md` | Detailed A2 input/output notes |
 | `docs/edge-cases.md` | What each A2/A3 edge-case input should show |
+| `server/` | WebSocket backend: the browser picks scheduler/allocator, sends orders, and receives the simulation step by step (`make server`, see `docs/server.md`) |
+| `docs/server.md` | Server protocol: messages, frame format, pacing controls |
 
 ## Compile
 
