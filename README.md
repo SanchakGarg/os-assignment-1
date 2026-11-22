@@ -1,34 +1,39 @@
-# Smart Restaurant – Process Management (A1)
+# Smart Restaurant – Process + Memory Management (A1 + A2)
 
-Orders are processes, 2 chefs are the service units. Algorithms: FCFS, PRIORITY (non-preemptive), SJF.
+Orders are processes and 2 chefs are the service units. Schedulers: FCFS, PRIORITY (non-preemptive) and SJF. Before cooking, an order must be given adjacent slots in two memory pools, SPACE (6 waiting seats) and TABLE (3 dining tables), using First Fit, Best Fit or Worst Fit.
 
 ## Structure
 
+```
+src/        the simulator
+tools/      helper programs (gantt_chart, check_input)
+tests/a1/   A1 edge cases, expected rows, comparison workload, Gantt test
+tests/a2/   A2 unit tests, valid/invalid inputs, edge cases, comparison workload
+tests/a3/   final-project sample inputs and edge cases
+scripts/    comparison table and final-project checks
+docs/       input/output notes, edge-case notes, final-project samples
+```
+
 | File | Purpose |
 |---|---|
-| `restaurant.h` | `Process` struct, shared prototypes |
-| `main.c` | CLI, picks algorithm |
-| `input.c` | Input parser |
-| `sim.c` | Event-driven simulation, 2 chefs |
-| `sched.c` | **Algorithm placeholders (`pick_fcfs`, `pick_priority`, `pick_sjf`) – write code here** |
-| `metrics.c` | Metrics and output |
-| `gantt.c`, `gantt.h` | Text Gantt chart rendering, shared by `restaurant` and `gantt_chart` |
-| `gantt_chart.c` | Gantt chart generator comparing all three algorithms |
-| `input_parser.c`, `input_parser.h` | A2 seven-field input parser with validation |
-| `cli_args.c`, `cli_args.h` | A2 command-line arguments (scheduler, allocator, phase, trace) |
-| `first_fit.c`, `first_fit.h` | First Fit contiguous allocation |
-| `csv_writer.c`, `csv_writer.h` | Standardized A2 result file (and the final-project format) |
-| `shared_types.h` | Shared A2 data types: workload, configuration, results *(provisional)* |
-| `a2_simulator.h` | A2 simulation entry point `simulate_a2()` *(provisional)* |
-| `a2_sim_stub.c` | **Temporary** placeholder until the A2 simulator is merged |
-| `check_input.c` | Validates an A2 input file without running the simulator |
-| `tests/edge/` | Edge-case inputs, expected rows and `check_rows.sh` |
-| `tests/comparison.txt` | 10-order workload used for the [algorithm comparison](#algorithm-comparison) |
-| `tests/gantt_chart_test.sh` | Checks the Gantt chart generator |
-| `tests/a2/` | A2 unit tests, valid/invalid inputs, `comparison_a2.txt`, `allocator_difference.txt` |
+| `src/main.c` | Entry point: A1 form (`INPUT SCHEDULER`) or A2 form (`INPUT SCHEDULER ALLOCATOR OUTPUT`) |
+| `src/restaurant.h` | `Process` record, `Memory`, and the scheduler/simulator/metrics prototypes |
+| `src/sim.c` | Event-driven simulation: 2 chefs, FIFO memory queue, both-or-neither admission; `simulate_workload()` is the A2 entry point |
+| `src/sched.c` | Schedulers: `pick_fcfs`, `pick_priority`, `pick_sjf` |
+| `src/memory.c`, `src/memory.h` | Allocators: `first_fit`, `best_fit`, `worst_fit`, plus pool take/release/fragmentation |
+| `src/metrics.c` | A1 report, and `collect_results()` for the A2 metrics |
+| `src/input.c` | A1 five-field input |
+| `src/input_parser.c`, `.h` | A2 seven-field input with validation |
+| `src/cli_args.c`, `.h` | Command-line arguments (scheduler, allocator, phase, trace) |
+| `src/csv_writer.c`, `.h` | Standard A2 result file (and the final-project format) |
+| `src/shared_types.h` | Shared data: `Workload`, `SimulationConfig`, `SimulationResult` |
+| `src/gantt.c`, `.h` | Text Gantt chart drawing |
+| `tools/gantt_chart.c` | Gantt charts comparing all three schedulers |
+| `tools/check_input.c` | Validates an A2 input file without running the simulation |
 | `scripts/run_comparison.sh` | Runs all 9 scheduler × allocator combinations and prints a table |
 | `docs/input-output.md` | Detailed A2 input/output notes |
-| `HANDOFF.md` | Integration notes for the team |
+| `docs/edge-cases.md` | What each A2/A3 edge-case input should show |
+
 ## Compile
 
 ```
@@ -45,13 +50,13 @@ make clean
 `ALGORITHM` is one of `FCFS`, `PRIORITY`, `SJF`.
 
 ```
-./restaurant tests/edge/all_same_time.txt FCFS
-./restaurant tests/edge/all_same_time.txt PRIORITY
-./restaurant tests/edge/all_same_time.txt SJF
-sh tests/edge/check_rows.sh     # every edge case, every algorithm, vs expected rows
-sh tests/gantt_chart_test.sh    # Gantt chart generator checks
-./gantt_chart tests/edge        # text Gantt charts, one block per input (all algorithms)
-./gantt_chart tests/edge/starvation.txt  # Gantt chart for a single input file
+./restaurant tests/a1/edge/all_same_time.txt FCFS
+./restaurant tests/a1/edge/all_same_time.txt PRIORITY
+./restaurant tests/a1/edge/all_same_time.txt SJF
+sh tests/a1/edge/check_rows.sh     # every edge case, every algorithm, vs expected rows
+sh tests/a1/gantt_chart_test.sh    # Gantt chart generator checks
+./gantt_chart tests/a1/edge        # text Gantt charts, one block per input (all algorithms)
+./gantt_chart tests/a1/edge/starvation.txt  # Gantt chart for a single input file
 ```
 
 ### A2 (memory management)
@@ -157,16 +162,34 @@ With E = last completion − first arrival: throughput = N / E, and chef utiliza
 - **Ties:** none are possible, because the lowest address always wins.
 Example: in the pool `[X _ X _ _ X]`, a request for 2 slots skips the 1-slot hole at slot 1 and returns slot 3.
  
-### Best Fit and Worst Fit
- 
-*To be added with the A2 simulator.*
+### Best Fit
+
+`best_fit` chooses the **smallest** free run that is big enough. Ties go to the lowest slot.
+
+- **Advantage:** it keeps large runs free for large orders. In `tests/a2/edge/07_fragmentation_and_fit.txt` it lets B2 in at once, where First and Worst Fit make it wait 7.
+- **Trade-off:** it tends to leave tiny leftover holes that nobody can use.
+
+Example: in `[_ _ _ X _ X]`, a 1-slot request takes slot 4 (the exact-size hole), not slot 0.
+
+### Worst Fit
+
+`worst_fit` chooses the **largest** free run. Ties go to the lowest slot.
+
+- **Advantage:** the leftover piece is as large as possible, so it is more likely to fit a later order.
+- **Trade-off:** it breaks up the big runs, so a later large order may not fit anywhere.
+
+Example: in `[X _ X _ _ X]`, a 1-slot request takes slot 3 (the 2-slot hole), not slot 1.
+
+### Admission
+
+All three algorithms only search; `try_admit()` in `src/sim.c` places the order in SPACE and in TABLE first, and marks slots only if **both** fit, so an order never holds half its request. Orders wait in one FIFO queue (arrival time, then ID). Only the head is tried; if it does not fit, the orders behind it wait too. Slots are freed when the order completes; adjacent free slots join up automatically.
  
 ## A2 algorithm comparison
  
-`tests/a2/comparison_a2.txt` is the A1 comparison workload (the same 10 orders as `tests/comparison.txt`) with SPACE and TABLE requests added, so the A2 results can be compared directly with the A1 table below. `tests/a2/allocator_difference.txt` is a small input where the allocator choice changes memory waiting.
+`tests/a2/comparison_a2.txt` is the A1 comparison workload (the same 10 orders as `tests/a1/comparison.txt`) with SPACE and TABLE requests added, so the A2 results can be compared directly with the A1 table below. `tests/a2/allocator_difference.txt` is a small input where the allocator choice changes memory waiting.
  
 ```
-sh scripts/run_comparison.sh tests/a2/comparison_a2.txt > results/comparison.md
+mkdir -p results && sh scripts/run_comparison.sh tests/a2/comparison_a2.txt > results/comparison.md
 ```
  
 The script runs all 9 combinations (3 schedulers × 3 allocators) and keeps each CSV in `results/comparison/`. It then prints a table of average waiting, turnaround, response and memory wait, the blocked-for-memory count, SPACE and TABLE peak/utilization/fragmentation, and completion order.
@@ -176,12 +199,14 @@ The script runs all 9 combinations (3 schedulers × 3 allocators) and keeps each
 ## Testing
  
 ```
-make test-a2
+make test       # A1 and A2 tests
+make test-a1    # A1 rows against expected output, Gantt chart
+make test-a2    # A2 unit tests and input checks
 ```
  
 | Test | Checks |
 |---|---|
-| `tests/a2/test_first_fit.c` | Empty and full pools, exact fit, size 1 and full capacity, holes, equal-sized holes, the TABLE pool |
+| `tests/a2/test_memory.c` | First/Best/Worst Fit: empty and full pools, exact fit, size 1 and full capacity, holes, equal-sized holes, the TABLE pool; fragmentation and freeing |
 | `tests/a2/test_parser.c` | Spec example values, parsing stops at the A3 resource section, trailing content, error line numbers |
 | `tests/a2/test_csv.c` | Exact one-order output, lexicographic ID sorting, final-project format, no output for an incomplete run |
 | `tests/a2/test_cli.c` | All scheduler/allocator names, options in any position, bad arguments, the A1 two-argument form |
@@ -211,7 +236,7 @@ O2,1,1,4,VIP
 One row per process (sorted by ID), then `SUMMARY` with `AVERAGE_WAITING`, `AVERAGE_TURNAROUND`, `AVERAGE_RESPONSE`, `THROUGHPUT`, `UTILIZATION`.
 
 This CSV is what `restaurant` writes whenever its output is piped or redirected
-(for example `./restaurant tests/edge/all_same_time.txt FCFS > out.csv`). When run directly
+(for example `./restaurant tests/a1/edge/all_same_time.txt FCFS > out.csv`). When run directly
 in a terminal it shows the same numbers as formatted tables — a results table
 and a summary box — followed by the Gantt chart.
 
@@ -282,14 +307,14 @@ On the sample input:
 | SJF | 2.40 | 7.60 | 2.40 |
 
 Trade-off: long orders can be delayed for as long as shorter ones keep arriving
-(starvation). In `tests/edge/starvation.txt`, order `O3` (service 20) waits 17
+(starvation). In `tests/a1/edge/starvation.txt`, order `O3` (service 20) waits 17
 time units under SJF, compared with 2 under FCFS.
 
 ## Gantt chart visualizer
 
 When `./restaurant` is run in a terminal, it prints a Gantt chart for the chosen
 input file and algorithm after the `SUMMARY` block. When its output is piped or
-redirected (e.g. `./restaurant tests/edge/all_same_time.txt FCFS > out.csv`), the chart is
+redirected (e.g. `./restaurant tests/a1/edge/all_same_time.txt FCFS > out.csv`), the chart is
 left out so the output stays exactly the CSV report described under
 [Output](#output). The chart is drawn only after the report has been written,
 in a separate child process, and is printed only if it was generated completely.
@@ -308,8 +333,8 @@ glance.
 
 ```bash
 make
-./gantt_chart tests/edge                 # every .txt in tests/edge/
-./gantt_chart tests/edge/starvation.txt  # one input file
+./gantt_chart tests/a1/edge                 # every .txt in tests/a1/edge/
+./gantt_chart tests/a1/edge/starvation.txt  # one input file
 ```
 
 Each bar spans from the process start time to completion time, and the time axis
@@ -319,7 +344,7 @@ emitted so the result stays readable and easy to compare.
 
 ## Algorithm comparison
 
-`tests/comparison.txt` is a 10-order workload built to show how the three
+`tests/a1/comparison.txt` is a 10-order workload built to show how the three
 algorithms differ: long and short jobs, three VIP orders (priority 1) arriving
 while the chefs are busy, and steady arrivals over the first 8 time units.
 
@@ -341,10 +366,10 @@ O10,8,3,3,NORMAL
 Run it with:
 
 ```bash
-./restaurant tests/comparison.txt FCFS
-./restaurant tests/comparison.txt PRIORITY
-./restaurant tests/comparison.txt SJF
-./gantt_chart tests/comparison.txt
+./restaurant tests/a1/comparison.txt FCFS
+./restaurant tests/a1/comparison.txt PRIORITY
+./restaurant tests/a1/comparison.txt SJF
+./gantt_chart tests/a1/comparison.txt
 ```
 
 | Metric | FCFS | PRIORITY | SJF |
@@ -375,7 +400,7 @@ the per-order `WAITING` column.
 Gantt chart (all three algorithms on one time axis):
 
 ```
-=== tests/comparison.txt ===
+=== tests/a1/comparison.txt ===
       Time: 0 -> 27
          0     2     5     8     10    13    16    18    21    24    27
          ------------------------------------------------------------

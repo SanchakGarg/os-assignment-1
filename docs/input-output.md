@@ -6,16 +6,16 @@
 
 ```sh
 make                 # builds restaurant, gantt_chart and check_input
-make test-a2         # parser, First Fit, CSV writer and CLI tests + bad-input checks
+make test-a2         # parser, First/Best/Worst Fit, CSV writer and CLI tests + bad-input checks
 
 ./restaurant INPUT_FILE SCHEDULER ALLOCATOR OUTPUT_FILE [--phase a2|a3] [--trace FILE]   # A2
 ./restaurant tests/a2/comparison_a2.txt FCFS FIRST_FIT result.csv
 
 ./restaurant INPUT_FILE SCHEDULER     # A1 form, unchanged (5-field input, report on stdout)
-./restaurant tests/comparison.txt SJF
+./restaurant tests/a1/comparison.txt SJF
 ```
 
-The 2-argument A1 form is kept so that the A1 schedulers, `tests/edge/check_rows.sh` and `gantt_chart` work exactly as they did in A1. Its output was checked to be byte-for-byte identical to the A1 build on `tests/comparison.txt` for all three schedulers.
+The 2-argument A1 form is kept so that the A1 schedulers, `tests/a1/edge/check_rows.sh` and `gantt_chart` work exactly as they did in A1. Its output was checked to be byte-for-byte identical to the A1 build on `tests/a1/comparison.txt` for all three schedulers.
 
 | Argument | Allowed values |
 | --- | --- |
@@ -99,7 +99,7 @@ Example with pool `[X _ X _ _ X]` and a request of 2: First Fit skips the 1-slot
 ## Comparing the 9 combinations
 
 ```sh
-sh scripts/run_comparison.sh tests/a2/comparison_a2.txt > results/comparison.md
+mkdir -p results && sh scripts/run_comparison.sh tests/a2/comparison_a2.txt > results/comparison.md
 ```
 
-`tests/a2/comparison_a2.txt` is the A1 comparison workload (`tests/comparison.txt`, the same 10 orders) with SPACE_REQ and TABLE_REQ added. The README can therefore set the A2 numbers beside the A1 table and show how memory admission changes the schedule. The script runs FCFS, PRIORITY and SJF with FIRST_FIT, BEST_FIT and WORST_FIT. It keeps each CSV in `results/comparison/` and prints the README table: average waiting, turnaround, response and memory wait, blocked-for-memory count, SPACE and TABLE peak/utilization/fragmentation, and completion order.
+`tests/a2/comparison_a2.txt` is the A1 comparison workload (`tests/a1/comparison.txt`, the same 10 orders) with SPACE_REQ and TABLE_REQ added. The README can therefore set the A2 numbers beside the A1 table and show how memory admission changes the schedule. The script runs FCFS, PRIORITY and SJF with FIRST_FIT, BEST_FIT and WORST_FIT. It keeps each CSV in `results/comparison/` and prints the README table: average waiting, turnaround, response and memory wait, blocked-for-memory count, SPACE and TABLE peak/utilization/fragmentation, and completion order.
