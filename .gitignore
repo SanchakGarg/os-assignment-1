@@ -6,3 +6,5 @@ results/
 *.tmp
 *.o
 .DS_Store
+restaurant_server
+build/

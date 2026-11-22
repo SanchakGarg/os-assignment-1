@@ -6,6 +6,10 @@ LDLIBS = -lm
 CORE = src/sim.c src/sched.c src/memory.c src/metrics.c src/input.c \
        src/input_parser.c src/cli_args.c src/csv_writer.c src/gantt.c
 HEADERS = $(wildcard src/*.h)
+CXX = c++
+CXXFLAGS = -Wall -Wextra -O2 -std=c++17 -pthread -Isrc
+SERVER_SRC = $(wildcard server/*.cpp)
+CORE_OBJ = $(patsubst src/%.c,build/%.o,$(CORE))
 UNIT_TESTS = tests/bin/test_memory tests/bin/test_parser tests/bin/test_csv tests/bin/test_cli
 
 all: restaurant gantt_chart check_input
@@ -18,6 +22,16 @@ gantt_chart: tools/gantt_chart.c src/gantt.c src/gantt.h
 
 check_input: tools/check_input.c src/input_parser.c $(HEADERS)
 	$(CC) $(CFLAGS) -o $@ tools/check_input.c src/input_parser.c
+
+# WebSocket backend for the web simulator (see docs/server.md)
+server: restaurant_server
+
+restaurant_server: $(SERVER_SRC) $(wildcard server/*.hpp) $(CORE_OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $(SERVER_SRC) $(CORE_OBJ) $(LDLIBS)
+
+build/%.o: src/%.c $(HEADERS)
+	@mkdir -p build
+	$(CC) $(CFLAGS) -c -o $@ $<
 
 tests/bin/test_%: tests/a2/test_%.c $(CORE) $(HEADERS)
 	@mkdir -p tests/bin
@@ -34,6 +48,6 @@ test-a2: check_input $(UNIT_TESTS)
 	sh tests/a2/test_inputs.sh
 
 clean:
-	rm -rf restaurant gantt_chart check_input tests/bin
+	rm -rf restaurant gantt_chart check_input restaurant_server build tests/bin
 
-.PHONY: all test test-a1 test-a2 clean
+.PHONY: all server test test-a1 test-a2 clean

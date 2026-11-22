@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Restaurant Server Test</title>
+<style>
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --line: #d2d2d7; --free: #f2f2f2; --used: #4f7cff; --chip: #e8eeff; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #161618; --fg: #f2f2f2; --muted: #a1a1a6; --line: #3a3a3c; --free: #2a2a2d; --used: #5b86ff; --chip: #23304f; }
+  }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg); font: 14px/1.4 system-ui, sans-serif; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  select, input, button { font: inherit; padding: 4px 8px; }
+  .slots { display: flex; gap: 4px; }
+  .slot { width: 44px; height: 32px; border: 1px solid var(--line); border-radius: 4px; display: grid; place-items: center;
+          background: var(--free); font-size: 12px; }
+  .slot.used { background: var(--used); color: #fff; }
+  .label { width: 70px; color: var(--muted); }
+  #time { font-size: 20px; font-weight: 600; }
+  .chip { background: var(--chip); border-radius: 4px; padding: 2px 6px; margin-right: 4px; }
+  pre { max-height: 300px; overflow: auto; border: 1px solid var(--line); padding: 8px; font-size: 12px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<h2>Restaurant server test</h2>
+<div class="row">
+  <input id="url" value="ws://127.0.0.1:8080" size="22">
+  <button id="connect">Connect</button>
+  <span id="status">disconnected</span>
+</div>
+<div class="row">
+  <select id="scheduler"><option>FCFS</option><option>PRIORITY</option><option>SJF</option></select>
+  <select id="allocator"><option>FIRST_FIT</option><option>BEST_FIT</option><option>WORST_FIT</option></select>
+  <input type="file" id="file" accept=".txt">
+  <label>tick ms <input id="tick" type="number" value="500" min="0" style="width:70px"></label>
+  <button id="start">Start</button>
+  <button data-cmd="pause">Pause</button>
+  <button data-cmd="resume">Resume</button>
+  <button data-cmd="step">Step</button>
+  <button id="speed">Set speed</button>
+</div>
+<div class="row"><span id="time">t = –</span></div>
+<div class="row"><span class="label">Chefs</span><div class="slots" id="chefs"></div></div>
+<div class="row"><span class="label">SPACE</span><div class="slots" id="space"></div></div>
+<div class="row"><span class="label">TABLE</span><div class="slots" id="table"></div></div>
+<div class="row"><span class="label">Memory q</span><span id="memq"></span></div>
+<div class="row"><span class="label">Ready q</span><span id="readyq"></span></div>
+<pre id="log"></pre>
+<script>
+let sock = null;
+const $ = id => document.getElementById(id);
+const log = text => { $("log").textContent = text + "\n" + $("log").textContent; };
+const send = obj => sock && sock.readyState === 1 ? sock.send(JSON.stringify(obj)) : log("not connected");
+
+function drawSlots(el, owners) {
+  el.innerHTML = "";
+  for (const owner of owners) {
+    const d = document.createElement("div");
+    d.className = "slot" + (owner ? " used" : "");
+    d.textContent = owner || "";
+    el.appendChild(d);
+  }
+}
+const chips = ids => ids.length ? ids.map(id => `<span class="chip">${id}</span>`).join("") : "–";
+
+$("connect").onclick = () => {
+  sock = new WebSocket($("url").value);
+  sock.onopen = () => $("status").textContent = "connected";
+  sock.onclose = () => $("status").textContent = "disconnected";
+  sock.onmessage = e => {
+    const m = JSON.parse(e.data);
+    if (m.type === "frame") {
+      $("time").textContent = "t = " + m.time;
+      drawSlots($("chefs"), m.chefs);
+      drawSlots($("space"), m.pools.SPACE);
+      drawSlots($("table"), m.pools.TABLE);
+      $("memq").innerHTML = chips(m.queues.memory);
+      $("readyq").innerHTML = chips(m.queues.ready);
+      log(`t=${m.time}: ` + m.events.map(ev => ev.type + " " + ev.process_id).join(", "));
+    } else if (m.type === "results") {
+      log("RESULTS\n" + m.csv);
+    } else {
+      log(JSON.stringify(m));
+    }
+  };
+};
+
+$("start").onclick = async () => {
+  const f = $("file").files[0];
+  if (!f) return log("choose an orders .txt file first");
+  send({ type: "start", scheduler: $("scheduler").value, allocator: $("allocator").value,
+         orders: await f.text(), tick_ms: Number($("tick").value) });
+};
+$("speed").onclick = () => send({ type: "speed", tick_ms: Number($("tick").value) });
+document.querySelectorAll("[data-cmd]").forEach(b => b.onclick = () => send({ type: b.dataset.cmd }));
+</script>
+</body>
+</html>
