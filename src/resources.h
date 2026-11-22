@@ -18,8 +18,8 @@
  *     (no lost wake-ups, no barging, no busy-waiting);
  *   - one control mutex + condition variables carry commands from the
  *     coordinator to the workers and "settled" notifications back;
- *   - lock order is resource lock -> control lock -> trace lock, never the
- *     reverse, so the locks themselves cannot deadlock.
+ *   - lock order is resource lock -> control lock -> trace lock / event lock
+ *     (both leaves), never the reverse, so the locks themselves cannot deadlock.
  *
  * Deadlock prevention (default): resources have a global rank
  * COFFEE_MACHINE < MICROWAVE < OVEN_1 < OVEN_2, and a worker only ever waits
@@ -37,6 +37,15 @@ typedef struct ResourceSystem ResourceSystem;
 
 /* A worker as the coordinator sees it once all workers have settled. */
 typedef enum { WORKER_IDLE = 0, WORKER_BUSY, WORKER_BLOCKED } WorkerStatus;
+
+/* One equipment operation done by a worker, for live viewers. */
+typedef enum { RES_ACQUIRE = 0, RES_WAIT, RES_RELEASE, RES_ROLLBACK } ResEventKind;
+
+typedef struct {
+    ResEventKind kind;
+    int order;                /* index into Workload.processes */
+    int resource;             /* index into Workload.resources */
+} ResEvent;
 
 /* Starts one worker thread per order with actions. log may be NULL.
  * Returns NULL with *error set on failure. */
@@ -69,6 +78,18 @@ int rs_find_deadlock(ResourceSystem *rs, char *report, size_t size);
 /* One line in the resource-event trace, from the coordinator. resource may be -1. */
 void rs_trace(ResourceSystem *rs, int order, const char *event, int resource,
               const char *detail);
+
+/* Moves up to max equipment events recorded since the last call into out, in
+ * the order they happened, and returns how many. Call only while the workers
+ * are settled (after rs_run). */
+int rs_take_events(ResourceSystem *rs, ResEvent *out, int max);
+
+/* Read-only views of the equipment for viewers, valid while workers are settled. */
+int rs_resource_count(const ResourceSystem *rs);
+const char *rs_resource_id(const ResourceSystem *rs, int resource);
+int rs_holder(ResourceSystem *rs, int resource);                       /* order, -1 if free */
+int rs_waiters(ResourceSystem *rs, int resource, int *out, int max);   /* FIFO, head first */
+int rs_waiting_for(ResourceSystem *rs, int order);                     /* resource, -1 if none */
 
 /* RESOURCE rows and the EXCLUSIVITY_VIOLATIONS check. */
 int rs_fill_results(ResourceSystem *rs, SimulationResult *out);

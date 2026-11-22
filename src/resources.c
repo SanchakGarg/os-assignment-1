@@ -66,6 +66,12 @@ struct ResourceSystem {
     FILE *log;
     pthread_mutex_t log_lock;
     struct timespec t0;
+
+    /* Equipment events for viewers, drained by the coordinator after rs_run.
+     * Allocated once in rs_create so workers never allocate. */
+    pthread_mutex_t ev_lock;
+    ResEvent *ev;
+    int ev_len, ev_cap;
 };
 
 static _Thread_local const char *thread_name = "coordinator";
@@ -97,6 +103,16 @@ void rs_trace(ResourceSystem *rs, int order, const char *event, int resource, co
     trace_line(rs, order, event, resource, detail);
 }
 
+/* Records an equipment event for viewers. Called with the resource lock held,
+ * so a release is always recorded before the hand-over it causes. */
+static void note(ResourceSystem *rs, ResEventKind kind, int order, int resource)
+{
+    pthread_mutex_lock(&rs->ev_lock);
+    if (rs->ev_len < rs->ev_cap)             /* full: the viewer misses it, nothing else does */
+        rs->ev[rs->ev_len++] = (ResEvent){ kind, order, resource };
+    pthread_mutex_unlock(&rs->ev_lock);
+}
+
 /* ---- resource operations, run on worker threads ---- */
 
 /* The calling worker now owns r: count it and check exclusivity independently. */
@@ -121,6 +137,7 @@ static int res_acquire(Worker *wk, int ri)
         r->acquisitions++;
         became_owner(rs, r);
         trace_line(rs, wk->order, "ACQUIRE", ri, "granted (free)");
+        note(rs, RES_ACQUIRE, wk->order, ri);
         pthread_mutex_unlock(&r->lock);
         return 0;
     }
@@ -131,6 +148,7 @@ static int res_acquire(Worker *wk, int ri)
     snprintf(detail, sizeof detail, "held by %s, queue position %d",
              rs->w->processes[r->holder].id, r->wq_len);
     trace_line(rs, wk->order, "WAIT", ri, detail);
+    note(rs, RES_WAIT, wk->order, ri);       /* before reporting blocked, so rs_run sees it */
 
     pthread_mutex_lock(&rs->ctl);
     wk->status = WORKER_BLOCKED;
@@ -149,6 +167,7 @@ static int res_acquire(Worker *wk, int ri)
     r->acquisitions++;
     became_owner(rs, r);
     trace_line(rs, wk->order, "ACQUIRE", ri, "granted (handed over on release)");
+    note(rs, RES_ACQUIRE, wk->order, ri);
     pthread_mutex_unlock(&r->lock);
     return 0;
 }
@@ -158,6 +177,7 @@ static void res_release(Worker *wk, int ri, const char *event)
 {
     ResourceSystem *rs = wk->rs;
     Resource *r = &rs->res[ri];
+    ResEventKind kind = strcmp(event, "ROLLBACK") == 0 ? RES_ROLLBACK : RES_RELEASE;
     char detail[96];
 
     atomic_fetch_sub(&r->inside, 1);
@@ -168,6 +188,7 @@ static void res_release(Worker *wk, int ri, const char *event)
         pthread_mutex_unlock(&r->lock);
         return;
     }
+    note(rs, kind, wk->order, ri);
     if (r->wq_len == 0) {
         r->holder = -1;
         trace_line(rs, wk->order, event, ri, "now free");
@@ -275,6 +296,12 @@ ResourceSystem *rs_create(const Workload *w, int unsafe_demo, FILE *log, Error *
     pthread_mutex_init(&rs->ctl, NULL);
     pthread_cond_init(&rs->settled, NULL);
     pthread_mutex_init(&rs->log_lock, NULL);
+    pthread_mutex_init(&rs->ev_lock, NULL);
+
+    /* One ACQUIRE makes at most 3R-1 events (rollbacks, waits, acquires). */
+    rs->ev_cap = w->action_count * 3 * (rs->r > 0 ? rs->r : 1) + 1;
+    rs->ev = calloc((size_t)rs->ev_cap, sizeof *rs->ev);
+    if (!rs->ev) goto oom;
 
     rs->res = calloc((size_t)(rs->r > 0 ? rs->r : 1), sizeof *rs->res);
     rs->workers = calloc((size_t)rs->n, sizeof *rs->workers);
@@ -373,6 +400,8 @@ void rs_destroy(ResourceSystem *rs)
     pthread_mutex_destroy(&rs->ctl);
     pthread_cond_destroy(&rs->settled);
     pthread_mutex_destroy(&rs->log_lock);
+    pthread_mutex_destroy(&rs->ev_lock);
+    free(rs->ev);
     free(rs->res);
     free(rs->workers);
     free(rs);
@@ -437,6 +466,56 @@ int rs_held_count(const ResourceSystem *rs, int order)
     int held = 0;
     for (int i = 0; wk->held && i < rs->r; i++) held += wk->held[i];
     return held;
+}
+
+int rs_take_events(ResourceSystem *rs, ResEvent *out, int max)
+{
+    pthread_mutex_lock(&rs->ev_lock);
+    int count = rs->ev_len < max ? rs->ev_len : max;
+    memcpy(out, rs->ev, (size_t)count * sizeof *out);
+    memmove(rs->ev, rs->ev + count, (size_t)(rs->ev_len - count) * sizeof *rs->ev);
+    rs->ev_len -= count;
+    pthread_mutex_unlock(&rs->ev_lock);
+    return count;
+}
+
+int rs_resource_count(const ResourceSystem *rs)
+{
+    return rs->r;
+}
+
+const char *rs_resource_id(const ResourceSystem *rs, int resource)
+{
+    return rs->res[resource].id;
+}
+
+/* The resource lock is needed even when settled: a worker that has just
+ * reported itself blocked holds it until it reaches pthread_cond_wait. */
+int rs_holder(ResourceSystem *rs, int resource)
+{
+    Resource *r = &rs->res[resource];
+    pthread_mutex_lock(&r->lock);
+    int holder = r->holder;
+    pthread_mutex_unlock(&r->lock);
+    return holder;
+}
+
+int rs_waiters(ResourceSystem *rs, int resource, int *out, int max)
+{
+    Resource *r = &rs->res[resource];
+    pthread_mutex_lock(&r->lock);
+    int count = r->wq_len < max ? r->wq_len : max;
+    memcpy(out, r->waitq, (size_t)count * sizeof *out);
+    pthread_mutex_unlock(&r->lock);
+    return count;
+}
+
+int rs_waiting_for(ResourceSystem *rs, int order)
+{
+    pthread_mutex_lock(&rs->ctl);
+    int ri = rs->workers[order].status == WORKER_BLOCKED ? rs->workers[order].waiting_for : -1;
+    pthread_mutex_unlock(&rs->ctl);
+    return ri;
 }
 
 int rs_find_deadlock(ResourceSystem *rs, char *report, size_t size)
