@@ -28,6 +28,10 @@ using Clock = std::chrono::steady_clock;
 const int DEFAULT_TICK_MS = 500;
 const int MAX_TICK_MS = 60000;
 
+/* Every frame lists every order, so keep live runs to what a viewer can show. */
+const int MAX_VIEWER_ORDERS = 200;
+const int MAX_VIEWER_ACTIONS = 2000;
+
 /* sim.c keeps its state in static variables, so one simulation at a time. */
 std::mutex sim_mutex;
 
@@ -38,7 +42,7 @@ struct Run {
     size_t next = 0;                     /* index of the next frame to send */
     Clock::time_point due;               /* when that frame is due */
     std::vector<RecordedFrame> frames;
-    std::string results;
+    std::vector<std::string> closing;    /* sent after the last frame: results or deadlock */
 };
 
 std::string error_json(const std::string &message, int line = 0)
@@ -72,13 +76,13 @@ const char *sched_name(int k) { return scheduler_name((SchedulerKind)k); }
 const char *alloc_name(int k) { return allocator_name((AllocatorKind)k); }
 
 /* The standard CSV, written into memory by the existing writer. */
-bool csv_text(const SimulationResult &result, std::string &out, Error &error)
+bool csv_text(const SimulationResult &result, Phase phase, std::string &out, Error &error)
 {
     char *buf = nullptr;
     size_t len = 0;
     FILE *f = open_memstream(&buf, &len);
     if (!f) return false;
-    int status = write_standard_csv(f, &result, PHASE_A2, &error);
+    int status = write_standard_csv(f, &result, phase, &error);
     fclose(f);
     if (status == 0) out.assign(buf, len);
     free(buf);
@@ -91,7 +95,7 @@ std::string start_run(const json::Object &msg, Run &run)
 {
     static const Picker pickers[] = { pick_fcfs, pick_priority, pick_sjf };
     SimulationConfig config = {};
-    config.phase = PHASE_A2;
+    config.phase = PHASE_A3;             /* the final format; A2 files are valid A3 input */
     int sched = 0, alloc = 0;
 
     auto field = [&](const char *key) {
@@ -107,6 +111,12 @@ std::string start_run(const json::Object &msg, Run &run)
     config.scheduler = (SchedulerKind)sched;
     config.allocator = (AllocatorKind)alloc;
 
+    const std::string unsafe = field("unsafe_demo");
+    if (unsafe == "true" || unsafe == "1")
+        config.unsafe_demo = 1;
+    else if (!unsafe.empty() && unsafe != "false" && unsafe != "0")
+        return error_json("\"unsafe_demo\" must be true or false");
+
     std::string orders = field("orders");
     if (orders.empty()) return error_json("\"orders\" is missing or empty");
 
@@ -116,12 +126,21 @@ std::string start_run(const json::Object &msg, Run &run)
     FILE *in = fmemopen(&orders[0], orders.size(), "r");
     if (!in) return error_json("cannot read the orders text");
     int status = read_process_section(in, &w, &error);
-    if (status == 0 && expect_only_blank_lines(in, &error) != 0) {
+    if (status == 0 && read_resource_sections(in, &w, &error) != 0) {
         workload_free(&w);
         status = -1;
     }
     fclose(in);
     if (status != 0) return error_json(error.message, error.line);
+    if (w.n > MAX_VIEWER_ORDERS || w.action_count > MAX_VIEWER_ACTIONS) {
+        std::string message = "too large for the live viewer: " + std::to_string(w.n) +
+                              " orders and " + std::to_string(w.action_count) +
+                              " actions (at most " + std::to_string(MAX_VIEWER_ORDERS) +
+                              " and " + std::to_string(MAX_VIEWER_ACTIONS) +
+                              "); use ./restaurant for big inputs";
+        workload_free(&w);
+        return error_json(message);
+    }
 
     Recorder recorder{pickers[sched], {}};
     SimulationResult result;
@@ -129,42 +148,58 @@ std::string start_run(const json::Object &msg, Run &run)
         std::lock_guard<std::mutex> lock(sim_mutex);
         status = simulate_workload(&w, &config, record_frame, &recorder, &result, &error);
     }
-    if (status != 0) {
+    /* A deadlock (unsafe demo only) still has frames worth showing, up to the
+     * moment the cycle formed; the result itself has already been freed. */
+    bool deadlocked = status == -2 && !recorder.frames.empty();
+    if (status != 0 && !deadlocked) {
         workload_free(&w);
         return error_json(error.message);
     }
 
-    std::string csv;
-    if (!csv_text(result, csv, error)) {
+    std::vector<std::string> closing;
+    if (deadlocked) {
+        closing.push_back(deadlock_json(recorder.frames.back().time, error.message));
+    } else {
+        std::string csv;
+        if (!csv_text(result, config.phase, csv, error)) {
+            simulation_result_free(&result);
+            workload_free(&w);
+            return error_json(std::string("cannot format results: ") + error.message);
+        }
+        closing.push_back(results_json(result, csv));
         simulation_result_free(&result);
-        workload_free(&w);
-        return error_json(std::string("cannot format results: ") + error.message);
     }
+    closing.push_back("{\"type\":\"done\"}");
 
-    run.active = true;
+    run.active = !recorder.frames.empty();
     run.paused = false;
     run.tick_ms = parse_tick(msg, DEFAULT_TICK_MS);
     run.next = 0;
     run.due = Clock::now();
     run.frames = std::move(recorder.frames);
-    run.results = results_json(result, csv);
+    run.closing = std::move(closing);
     std::string started = started_json(w, sched_name(sched), alloc_name(alloc),
-                                       (int)run.frames.size(),
+                                       config.unsafe_demo != 0, (int)run.frames.size(),
                                        run.frames.empty() ? 0 : run.frames.back().time,
                                        run.tick_ms);
-    simulation_result_free(&result);
     workload_free(&w);
     return started;
 }
 
-/* Sends the next frame; after the last one, the results. Returns false if the client left. */
+/* Sends the next frame; after the last one, the closing messages. Returns false if the client left. */
 bool send_next(int fd, Run &run)
 {
+    if (run.next >= run.frames.size()) {
+        run.active = false;
+        return true;
+    }
     if (!ws::send_text(fd, run.frames[run.next].json)) return false;
     run.next++;
     if (run.next == run.frames.size()) {
         run.active = false;
-        return ws::send_text(fd, run.results) && ws::send_text(fd, "{\"type\":\"done\"}");
+        for (const std::string &m : run.closing)
+            if (!ws::send_text(fd, m)) return false;
+        return true;
     }
     int gap = run.frames[run.next].time - run.frames[run.next - 1].time;
     run.due = Clock::now() + std::chrono::milliseconds((long long)gap * run.tick_ms);
@@ -225,7 +260,9 @@ void run_session(int fd)
         "\"allocators\":[\"FIRST_FIT\",\"BEST_FIT\",\"WORST_FIT\"],"
         "\"chefs\":" + std::to_string(CHEFS) +
         ",\"pools\":{\"SPACE\":" + std::to_string(SPACE_CAPACITY) +
-        ",\"TABLE\":" + std::to_string(TABLE_CAPACITY) + "}}";
+        ",\"TABLE\":" + std::to_string(TABLE_CAPACITY) + "}"
+        ",\"equipment\":[\"COFFEE_MACHINE\",\"MICROWAVE\",\"OVEN_1\",\"OVEN_2\"]"
+        ",\"unsafe_demo\":true,\"max_orders\":" + std::to_string(MAX_VIEWER_ORDERS) + "}";
     Run run;
     bool open = ws::send_text(fd, hello);
 
