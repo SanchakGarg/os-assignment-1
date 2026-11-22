@@ -138,31 +138,42 @@ make server
 # open http://127.0.0.1:8080/
 ```
 
-The page is a pixel-art restaurant that fills the screen. A start menu sets up the run:
+The page shows the restaurant as one room seen from above, drawn in the style of a handheld monster-collecting RPG (original pixel art, made in code). It has:
 
-- **Scenario:** one of the sample inputs from `tests/`, each with a note on what it shows. You can also upload a `.txt` file or edit the input in place. Input errors from the server show the message and highlight the line.
+- the kitchen in the top-left corner, with the two chefs and the machines;
+- the order board on the back wall;
+- 6 waiting chairs in the bottom-left corner;
+- 3 tables in the middle, labelled T1, T2, T3;
+- the door, with the street outside where the line forms.
+
+The start menu uses windows with a ▶ cursor:
+
+- **Scenario:** a sample input from `tests/`, or upload/edit your own.
 - **CPU scheduling:** FCFS, PRIORITY or SJF.
 - **Memory allocation:** First, Best or Worst Fit.
 - **Deadlock handling:** prevention ON, or OFF (the unsafe demo).
-- **Clock-cycle length:** 1 s by default, 0.25–3 s.
+- **Cycle length:** 1 s by default, 0.25–3 s.
+
+A description box explains the highlighted option. Use ↑ ↓ to choose, ← → to switch window, and Enter to start. Input errors from the server show the message and highlight the line.
 
 The server runs the real simulator (the same code as `./restaurant`) and sends every frame. The browser then plays it back one clock cycle at a time:
 
 | On screen | OS idea |
 | --- | --- |
-| A party of customers per order (party size = seats needed) arrives on the street | process arrival |
-| The line outside the door, with an ID sign over each party ("3S 2T" = 3 seats, 2 tables) | FIFO memory queue (`BLOCKED_MEMORY`) |
-| Seats 0–5 and tables T0–T2; a party sits on adjacent seats and its tables take its colour. On admission the free gaps flash yellow and the chosen gap green | contiguous SPACE / TABLE pools, First/Best/Worst Fit |
-| Ticket rail, sorted by the scheduler, with the field it uses highlighted | READY queue |
+| A party of customers per order (party size = chairs needed) walks in along the street | process arrival |
+| The line outside the door, with a sign over each party showing chairs and tables needed | FIFO memory queue (`BLOCKED_MEMORY`) |
+| The party sits on chairs next to each other in the corner, and its table(s) get its cloth and flag. On admission the free gaps flash yellow and the chosen gap green | contiguous SPACE / TABLE pools, First/Best/Worst Fit |
+| Order board with tickets sorted by the scheduler, with the field it uses highlighted | READY queue |
 | Two chefs with a bubble showing the order and its progress | 2 CPUs, non-preemptive |
 | A chef walks to the oven, microwave or coffee machine within one cycle, and the machine shows its holder | resource acquire/release by the worker threads |
 | A red "WAIT" tag above a machine; the order's chef walks away | `BLOCKED_RESOURCE`, hold and wait |
+| When the food is ready, the dish lands on the order's table, and the party walks to it and then leaves | completion frees the chairs and tables |
 | Red arrows between machines and a deadlock screen with the wait-for cycle | circular wait, detected (prevention OFF) |
 | A "ROLLBACK" popup | deadlock prevention by ordered acquisition |
 
-A caption under the scene explains every event of the current cycle in plain English. The timeline shows who used each chef and machine in every cycle, and clicking it jumps to that cycle. The LOG drawer has the full history, a live table of orders and a legend. At the end a results screen shows the per-order metrics, pool and machine statistics, and a CSV download of the graded result file.
+The dialog box under the scene types out every event of the current cycle in plain English. The timeline shows who used each chef and machine in every cycle, and clicking it jumps to that cycle. The LOG drawer has the full history, a live table of orders and a legend. At the end a results screen shows the per-order metrics, chair/table and machine statistics, and a CSV download of the graded result file.
 
-Controls: Space play/pause, ← → previous/next cycle, − + cycle length, R restart, M menu, L log, G timeline. URL options make a demo or screenshot start straight away, for example `http://127.0.0.1:8080/?scenario=deadlock&unsafe=1&autostart=1`. Other options are `sched`, `alloc`, `speed`, and `seek`/`phase` (freeze at a moment). The page also works when opened directly from disk (`web/index.html`), and then connects to `ws://127.0.0.1:8080`. Fonts come from Google Fonts, with a monospace fallback offline.
+Controls: Space play/pause, ← → previous/next cycle, − + cycle length, R restart, M menu, L log, G timeline. URL options make a demo or screenshot start straight away, for example `http://127.0.0.1:8080/?scenario=deadlock&unsafe=1&autostart=1`. Other options are `sched`, `alloc`, `speed`, and `seek`/`phase` (freeze at a moment). The page also works when opened directly from disk (`web/index.html`), and then connects to `ws://127.0.0.1:8080`. Fonts (Jersey 10, Press Start 2P) come from Google Fonts, with a monospace fallback offline.
 
 
 # Final Project: Concurrency and Integrated Simulation
