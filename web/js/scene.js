@@ -82,6 +82,7 @@
     scale = Math.min(canvas.width / W, canvas.height / H);
     ox = Math.round((canvas.width - W * scale) / 2);
     oy = Math.round((canvas.height - H * scale) / 2);
+    Sc.render(performance.now() / 1000);          /* resizing cleared the canvas: redraw now */
   };
 
   /* Pool sizes come from the server's hello. */
@@ -474,7 +475,7 @@
     drawWallClock(t, phase);
     drawKitchen(run, prev, cur, declared, t, phase, now);
     drawRoom(run, prev, cur, events, t, phase, now);
-    drawStaticLabels(run, cur, phase);
+    drawStaticLabels(run, prev, cur, phase);
     if (run) drawPopups(prev, cur, events, phase);
     if (run && run.deadlock && t >= P.endTime && phase >= 0.6) drawDeadlock(cur, now);
 
@@ -539,6 +540,13 @@
         else if (s.kind === "hook") drawHookTag(s, id, F);
       };
       if (same) { drawAt(b, cur, phase); continue; }
+      const railish = q => q && (q.kind === "rail" || q.kind === "more");
+      if ((railish(a) && railish(b)) || (a && b && a.kind === "hook" && b.kind === "hook")) {
+        /* moving along the board (or along a machine's line): slide, full size */
+        const p = along({ pts: [{ x: a.x, y: a.y }, { x: b.x, y: b.y }], win: [0.15, 0.55] }, phase);
+        drawAt(Object.assign({}, phase < 0.55 ? a : b, { x: p.x, y: p.y }), phase < 0.55 ? prev : cur, phase);
+        continue;
+      }
       if (!b) { if (a.kind !== "chef" && phase < 0.05) drawFlyingTicket(a.x + 5, a.y + 8, id); continue; }
       let from = a, win = [0.15, 0.55];
       if (!a) {                                     /* just seated: the order goes to the board */
@@ -647,13 +655,19 @@
       if (d.carryBag) Sp.bag(wctx, d.x + 4, d.y - 10);
     }
     // ID sign over each party that is standing or walking
-    const leaders = {};
-    for (const d of people) if (d.frame !== "sit" && (!leaders[d.id] || d.j === 0)) leaders[d.id] = d;
+    /* Signs follow the party's members, so they never jump ahead of them. */
+    const leaders = {}, sumX = {}, count = {};
+    for (const d of people) {
+      if (d.frame === "sit") continue;
+      if (!leaders[d.id] || d.j === 0) leaders[d.id] = d;
+      sumX[d.id] = (sumX[d.id] || 0) + d.x;
+      count[d.id] = (count[d.id] || 0) + 1;
+    }
     for (const id in leaders) {
       const d = leaders[id], m = run.meta[id], col = Sc.colorOf(id);
-      const L = cur.byId[id].state === "BLOCKED_MEMORY" ? queueLayout(cur)[id] : null;
-      const sx = L && !d.moving ? L.center : d.x;
-      const lift = L && L.pos % 2 ? 12 : 0;                   /* alternate heights in a long line */
+      const sx = sumX[id] / count[id];
+      /* outside, every other party's sign sits higher so a long line stays readable */
+      const lift = (m.index % 2) * 12 * clamp01((d.y - WALL_Y) / 30);
       label(id, sx, d.y - 28 - lift, { size: 3.6, color: Sp.ink(col), bg: col, pad: 0.8, alpha: d.alpha, border: "#283040" });
       if (!d.leaving) needSign(sx, d.y - 41 - lift, m.space_req, m.table_req, d.alpha);
     }
@@ -726,7 +740,7 @@
     });
   }
 
-  function drawStaticLabels(run, cur, phase) {
+  function drawStaticLabels(run, prev, cur, phase) {
     const sched = run ? run.started.scheduler : null;
     label("ORDER BOARD = READY QUEUE", BOARD.x + BOARD.w / 2, BOARD.y + 2, { size: 3.6, color: "#fff", bg: "#8a5428", pad: 0.8 });
     label(run ? `${sched}: ${RV.Narrate.schedulerRule[sched].split(" (")[0].toUpperCase()}` : "ORDERS WAIT HERE FOR A CHEF",
@@ -738,9 +752,11 @@
     const chairsMid = chairX(0) + (chairDX * Sc.pools.SPACE) / 2 - 2;
     const tablesMid = tableSpots.reduce((a, p) => a + p.x, 0) / tableSpots.length + TABLE_W / 2;
     const tablesLow = Math.max(...tableSpots.map(p => p.y));
-    const sp = run ? cur.pools.SPACE : new Array(Sc.pools.SPACE).fill(null);
-    const tb = run ? cur.pools.TABLE : new Array(Sc.pools.TABLE).fill(null);
-    const info = pool => (run && phase < 0.4 ? "" : ` · ${pool.filter(o => o === null).length} FREE, GAP ${holes(pool).reduce((a, h) => Math.max(a, h.size), 0)}`);
+    /* before the chairs and tables change hands this cycle, count the old state */
+    const F = run ? (phase < 0.4 ? prev : cur) : null;
+    const sp = F ? F.pools.SPACE : new Array(Sc.pools.SPACE).fill(null);
+    const tb = F ? F.pools.TABLE : new Array(Sc.pools.TABLE).fill(null);
+    const info = pool => ` · ${pool.filter(o => o === null).length} FREE, GAP ${holes(pool).reduce((a, h) => Math.max(a, h.size), 0)}`;
     label(`CHAIRS = SPACE POOL${info(sp)}`, chairsMid, CHAIR_Y - 19, { size: 2.8, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.8 });
     label(`TABLES = TABLE POOL${info(tb)}`, tablesMid, tablesLow + 34, { size: 2.8, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.8 });
     label("RESTAURANT", 315, 227.5, { size: 2.7, color: "#4a2810" });

@@ -268,15 +268,14 @@
     if (!P.run) return;
     const t = P.t;
     $("captionHead").textContent = `CYCLE ${t}`;
-    const lines = narrationAt(t);
-    dialog = {
-      lines: lines.length ? lines : [{ text: Nr.quiet(P.frameAt(t)), tag: null, kind: "quiet" }],
-      start: performance.now(),
-      shown: -1,
-    };
-    dialog.total = dialog.lines.reduce((a, n) => a + n.text.length, 0);
+    const found = narrationAt(t);
+    const lines = found.length ? found : [{ text: Nr.quiet(P.frameAt(t)), tag: null, kind: "quiet" }];
+    const key = lines.map(n => `${n.tag}|${n.text}`).join("\n");
+    if (dialog && dialog.key === key) return;        /* same words as before: don't retype them */
+    dialog = { lines, key, start: performance.now(), shown: -1 };
+    dialog.total = lines.reduce((a, n) => a + n.text.length, 0);
     U.tickDialog(performance.now());
-    $("caption").scrollTop = 0;
+    $("captionList").scrollTop = 0;
   };
 
   U.tickDialog = function (now) {
@@ -287,11 +286,13 @@
     if (shown === dialog.shown) return;
     dialog.shown = shown;
     let left = shown;
+    /* The untyped rest is already there, invisible, so lines never reflow. */
     $("captionList").innerHTML = dialog.lines.map(n => {
-      const part = n.text.slice(0, Math.max(0, left));
+      const cut = Math.max(0, Math.min(n.text.length, left));
       left -= n.text.length;
-      if (!n.tag) return `<li class="quiet">${esc(part)}</li>`;
-      return `<li class="k-${n.kind}"><span class="tag">${esc(n.tag)}</span>${esc(part)}</li>`;
+      const text = `${esc(n.text.slice(0, cut))}<span class="ghost">${esc(n.text.slice(cut))}</span>`;
+      if (!n.tag) return `<li class="quiet">${text}</li>`;
+      return `<li class="k-${n.kind}"><span class="tag">${esc(n.tag)}</span>${text}</li>`;
     }).join("");
     $("dialogMore").hidden = shown < dialog.total;
   };
@@ -411,6 +412,7 @@
   }
 
   U.onRunLoaded = function (run) {
+    dialog = null;
     setBadges(run);
     $("results").hidden = true;
     $("deadlockModal").hidden = true;

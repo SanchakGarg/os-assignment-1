@@ -32,6 +32,7 @@
     canvas.style.width = r.width + "px";
     canvas.style.height = r.height + "px";
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    G.render();                                   /* resizing cleared the canvas: redraw now */
   }
 
   G.load = function (run) {
