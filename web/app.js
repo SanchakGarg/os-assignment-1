@@ -479,16 +479,28 @@ async function importFiles(files) {
 function stop() {
   state.playing = false;
   clearInterval(state.timer);
+  state.timer = null;
   if (state.wsStreaming) {
     sendWs({ type: 'pause' });
   }
 }
 
 function seek(n) {
-  stop();
+  // Can't seek backwards during live stream, but allow forward on recorded frames
   const r = run();
   if (!r || !r.frames.length) return;
-  state.frame = Math.max(0, Math.min(Number(n), r.frames.length - 1));
+  const target = Math.max(0, Math.min(Number(n), r.frames.length - 1));
+  if (state.wsStreaming && target < state.frame) {
+    // Live stream: can only pause, not rewind
+    stop();
+  } else {
+    if (state.wsStreaming && target !== state.frame) {
+      // Allow scrubbing to already-received frames without stopping stream
+    } else {
+      stop();
+    }
+  }
+  state.frame = target;
   render();
 }
 
@@ -512,18 +524,23 @@ function play() {
   if (state.frame >= r.frames.length - 1) {
     state.frame = 0;
   }
+  _startPlaybackTimer();
+}
+
+function _startPlaybackTimer() {
+  clearInterval(state.timer);
   state.playing = true;
   render();
-
   state.timer = setInterval(() => {
-    if (state.frame >= r.frames.length - 1) {
+    const r = run();
+    if (!r || state.frame >= r.frames.length - 1) {
       stop();
       render();
       return;
     }
     state.frame++;
     render();
-  }, Math.max(120, 600 / state.speed));
+  }, Math.max(80, Math.floor(1000 / state.speed)));
 }
 
 function stepForward() {
@@ -532,21 +549,40 @@ function stepForward() {
   if (state.wsStreaming) {
     sendWs({ type: 'step' });
   } else {
-    seek(state.frame + 1);
+    const wasPlaying = state.playing;
+    stop();
+    if (state.frame < r.frames.length - 1) {
+      state.frame++;
+    }
+    render();
+    if (wasPlaying && state.frame < r.frames.length - 1) {
+      _startPlaybackTimer();
+    }
   }
 }
 
 function stepBackward() {
-  if (state.wsStreaming) {
-    stop();
-  }
-  seek(state.frame - 1);
+  const wasPlaying = state.playing;
+  if (state.wsStreaming) stop();
+  else stop();
+  if (state.frame > 0) state.frame--;
+  render();
 }
 
 function changeSpeed() {
-  state.speed = state.speed === 1 ? 2 : state.speed === 2 ? 4 : state.speed === 4 ? 0.5 : 1;
+  // Cycle: 0.5× → 1× → 2× → 4× → 0.5×
+  const speeds = [0.5, 1, 2, 4];
+  const idx = speeds.indexOf(state.speed);
+  state.speed = speeds[(idx + 1) % speeds.length];
+
   if (state.wsStreaming) {
-    sendWs({ type: 'speed', tick_ms: Math.max(50, Math.floor(500 / state.speed)) });
+    // ms per tick: lower speed → more ms between frames
+    const tickMs = Math.round(1000 / state.speed);
+    sendWs({ type: 'speed', tick_ms: tickMs });
+  } else if (state.playing) {
+    // Restart the local timer at new interval
+    _startPlaybackTimer();
+    return; // _startPlaybackTimer calls render()
   }
   render();
 }
@@ -615,6 +651,301 @@ function render() {
     equipment(r, f);
   }
   results(r);
+}
+
+// -----------------------------------------------------------------------------
+// UI Section Renderers
+// -----------------------------------------------------------------------------
+
+function orders(r, f) {
+  const list = [...f.processes];
+  list.sort((a, b) => {
+    if (state.arrival) {
+      const sa = r.model.processes.find(x => x.id === a.id)?.arrival ?? 0;
+      const sb = r.model.processes.find(x => x.id === b.id)?.arrival ?? 0;
+      return sa - sb;
+    }
+    return a.id.localeCompare(b.id);
+  });
+
+  $('sort-button').textContent = state.arrival ? 'BY ARRIVAL ↕' : 'BY ID ↕';
+  $('order-list').replaceChildren(...list.map(p => {
+    const spec = r.model.processes.find(x => x.id === p.id) || { category: 'NORMAL', service: p.executed_service + p.remaining_service };
+    const row = document.createElement('div');
+    row.className = 'order-row';
+
+    const s1 = document.createElement('span');
+    s1.className = 'order-stamp';
+    s1.textContent = p.id;
+
+    const s2 = document.createElement('span');
+    s2.className = 'order-detail';
+    const holdsText = p.waiting_for && p.waiting_for.length ? ` · waiting ${p.waiting_for.join(', ')}` : '';
+    s2.textContent = `${spec.category} · ${p.executed_service}/${spec.service} cooked${holdsText}`;
+
+    const s3 = document.createElement('span');
+    s3.className = 'state-badge state-' + p.state;
+    s3.textContent = p.state.replace('BLOCKED_', 'WAIT ');
+
+    row.append(s1, s2, s3);
+    return row;
+  }));
+}
+
+const NAMES = {
+  ARRIVE: 'Arrived',
+  DISPATCH: 'Dispatched',
+  COMPLETE: 'Completed',
+  MEMORY_ADMIT: 'Admitted',
+  MEMORY_BLOCK: 'Memory Wait',
+  RESOURCE_ACQUIRE: 'Acquired',
+  RESOURCE_WAIT: 'Waiting',
+  RESOURCE_RELEASE: 'Released',
+  PREEMPT: 'Preempted',
+};
+
+function events(r, f) {
+  const recent = [];
+  for (let i = state.frame; i >= 0 && recent.length < 7; i--) {
+    const fr = r.frames[i];
+    if (fr && fr.events) {
+      for (const e of [...fr.events].reverse()) {
+        recent.push({ time: fr.time, event: e });
+      }
+    }
+  }
+  if (!recent.length) {
+    recent.push({ time: f.time, event: { type: 'ARRIVE', reason: 'The dining room is ready.' } });
+  }
+
+  $('event-list').replaceChildren(...recent.slice(0, 7).map(x => {
+    const row = document.createElement('div');
+    row.className = 'event-row';
+
+    const tm = document.createElement('span');
+    tm.className = 'event-time';
+    tm.textContent = String(x.time).padStart(2, '0');
+
+    const body = document.createElement('span');
+    const type = document.createElement('span');
+    type.className = 'event-type';
+    type.textContent = (NAMES[x.event.type] || x.event.type || 'Update').toUpperCase();
+
+    body.append(
+      type,
+      document.createElement('br'),
+      document.createTextNode(`${x.event.process_id ? x.event.process_id + ' · ' : ''}${x.event.resource_id ? '[' + x.event.resource_id + '] ' : ''}${x.event.reason || NAMES[x.event.type] || 'Restaurant updated'}`)
+    );
+
+    row.append(tm, body);
+    return row;
+  }));
+}
+
+function memory(f) {
+  $('memory-pools').replaceChildren(...[['SPACE', f.pools.SPACE], ['TABLE', f.pools.TABLE]].map(([name, slots]) => {
+    const wrap = document.createElement('div');
+    const title = document.createElement('div');
+    const cells = document.createElement('div');
+
+    title.className = 'pool-name';
+    title.innerHTML = `<strong>${name}</strong><span>${slots.filter(Boolean).length}/${slots.length} IN USE</span>`;
+    cells.className = 'pool-slots';
+
+    cells.replaceChildren(...slots.map((owner, i) => {
+      const e = document.createElement('div');
+      e.className = 'memory-slot' + (owner ? (name === 'TABLE' ? ' table-owned' : ' owned') : '');
+      e.title = `${name} slot ${i + 1}: ${owner || 'free'}`;
+      e.textContent = i + 1;
+      const sub = document.createElement('span');
+      sub.textContent = owner || 'free';
+      e.append(sub);
+      return e;
+    }));
+
+    wrap.append(title, cells);
+    return wrap;
+  }));
+}
+
+function equipment(r, f) {
+  const list = f.resources || [];
+  $('resource-summary').textContent = r.run.phase === 'A2' ? 'Equipment added in A3' : `${list.length} declared items`;
+
+  $('resource-list').replaceChildren(...list.map(x => {
+    const e = document.createElement('div');
+    e.className = 'resource-tile' + (x.holder ? ' held' : '');
+
+    const n = document.createElement('div');
+    n.className = 'resource-name';
+    n.textContent = x.id.replace(/_/g, ' ');
+
+    const o = document.createElement('div');
+    o.className = 'resource-owner';
+    const waiters = x.waiters && x.waiters.length ? ` · Queue: ${x.waiters.join(', ')}` : '';
+    o.innerHTML = x.holder
+      ? `In use by <strong>${x.holder}</strong>${waiters}`
+      : 'Ready for cooking';
+
+    e.append(n, o);
+    return e;
+  }));
+
+  const ev = r.worker_evidence || [];
+  const box = $('worker-evidence');
+  box.classList.toggle('hidden', !ev.length);
+  if (ev.length) {
+    box.replaceChildren();
+    const h = document.createElement('strong');
+    h.textContent = 'REAL WORKER ACTIVITY · WALL CLOCK';
+    box.append(h, ...ev.slice(-4).map(x => {
+      const d = document.createElement('div');
+      d.textContent = `${x.worker_id} · ${x.process_id} ${x.action} ${x.resource_id} · ${x.outcome}`;
+      return d;
+    }));
+  }
+}
+
+function results(r) {
+  const s = r.results.summary;
+  const isLive = r.run.status !== 'COMPLETE';
+
+  // ── Summary stat cards ──────────────────────────────────────────────────────
+  const summaryDefs = [
+    { label: 'Avg Waiting',      key: 'average_waiting',          unit: 'ticks', note: 'Time spent in queues (memory + ready + resource)' },
+    { label: 'Avg Turnaround',   key: 'average_turnaround',       unit: 'ticks', note: 'Completion − Arrival' },
+    { label: 'Avg Response',     key: 'average_response',         unit: 'ticks', note: 'First CPU dispatch − Arrival' },
+    { label: 'Throughput',       key: 'throughput',               unit: 'ord/t', note: 'Completed orders per tick' },
+    { label: 'Chef Utilization', key: 'service_utilization_pct',  unit: '%',     note: 'Time chefs were actually cooking' },
+    { label: 'Avg Mem Wait',     key: 'average_memory_wait',      unit: 'ticks', note: 'Time blocked waiting for memory allocation (FIFO queue)' },
+  ];
+
+  const summaryEl = $('summary-stats-row') || $('summary-stats');
+  summaryEl.replaceChildren(...summaryDefs.map(({ label, key, unit, note }) => {
+    const val = s[key];
+    const e = document.createElement('div');
+    e.className = 'stat';
+    e.title = note;
+    const a = document.createElement('span');
+    const b = document.createElement('strong');
+    const u = document.createElement('small');
+    a.textContent = label;
+    b.textContent = isLive && val === undefined ? '…' : (typeof val === 'number' ? val.toFixed(2) : val ?? '—');
+    u.textContent = unit;
+    e.append(a, b, u);
+    return e;
+  }));
+
+  // ── Per-process table ────────────────────────────────────────────────────────
+  const ppEl = $('per-process-results');
+  if (!ppEl) return;
+  const procs = r.results.processes || [];
+
+  if (!procs.length || isLive) {
+    ppEl.innerHTML = isLive
+      ? '<p class="metrics-pending">Per-process metrics will appear when the simulation completes.</p>'
+      : '';
+    $('resource-results').innerHTML = '';
+    return;
+  }
+
+  const hasResourceWait = procs.some(p => p.resource_wait > 0);
+  const cols = [
+    { h: 'Order',      fn: p => p.id },
+    { h: 'Arrival',    fn: p => p.arrival,     title: 'Tick at which the order arrived' },
+    { h: 'Priority',   fn: p => p.priority,    title: 'Lower = higher priority (VIP=1)' },
+    { h: 'Burst',      fn: p => p.service,     title: 'CPU ticks needed to cook' },
+    { h: 'Start',      fn: p => p.start,       title: 'First tick a chef began cooking' },
+    { h: 'Finish',     fn: p => p.completion,  title: 'Tick the order was served' },
+    { h: 'Waiting',    fn: p => p.waiting,     title: 'Total time spent waiting (mem + ready + resource)' },
+    { h: 'Turnaround', fn: p => p.turnaround,  title: 'Finish − Arrival' },
+    { h: 'Response',   fn: p => p.response,    title: 'First dispatch − Arrival' },
+    { h: 'Mem Wait',   fn: p => p.mem_wait,    title: 'Time blocked in memory FIFO queue' },
+    { h: 'Ready Wait', fn: p => p.ready_wait,  title: 'Time in ready queue waiting for a free chef' },
+    ...(hasResourceWait ? [{ h: 'Res Wait', fn: p => p.resource_wait, title: 'Time blocked waiting for shared kitchen equipment' }] : []),
+  ];
+
+  const table = document.createElement('table');
+  table.className = 'metrics-table';
+
+  const thead = table.createTHead();
+  const hr = thead.insertRow();
+  cols.forEach(c => {
+    const th = document.createElement('th');
+    th.textContent = c.h;
+    if (c.title) th.title = c.title;
+    hr.appendChild(th);
+  });
+
+  const tbody = table.createTBody();
+  procs.forEach(p => {
+    const tr = tbody.insertRow();
+    tr.className = p.id === 'summary' ? 'metrics-summary-row' : '';
+    cols.forEach(c => {
+      const td = tr.insertCell();
+      td.textContent = c.fn(p) ?? '—';
+    });
+  });
+
+  // Summary row
+  const sfmt = v => typeof v === 'number' ? v.toFixed(2) : '—';
+  const sumRow = tbody.insertRow();
+  sumRow.className = 'metrics-avg-row';
+  cols.forEach((c, i) => {
+    const td = sumRow.insertCell();
+    if (i === 0) { td.textContent = 'AVG'; return; }
+    const sumKeys = { 'Waiting': 'average_waiting', 'Turnaround': 'average_turnaround', 'Response': 'average_response', 'Mem Wait': 'average_memory_wait' };
+    td.textContent = sumKeys[c.h] ? sfmt(s[sumKeys[c.h]]) : '';
+  });
+
+  ppEl.replaceChildren();
+  const tableHeading = document.createElement('div');
+  tableHeading.className = 'metrics-section-title';
+  tableHeading.textContent = 'Per-Order Breakdown';
+  ppEl.append(tableHeading, table);
+
+  // ── Resource stats ────────────────────────────────────────────────────────
+  const resEl = $('resource-results');
+  const resources = r.results.resources || [];
+  if (!resEl || !resources.length) {
+    if (resEl) resEl.innerHTML = '';
+    return;
+  }
+
+  const resHeading = document.createElement('div');
+  resHeading.className = 'metrics-section-title';
+  resHeading.textContent = 'Equipment Usage (A3)';
+
+  const resTable = document.createElement('table');
+  resTable.className = 'metrics-table';
+  const rth = resTable.createTHead().insertRow();
+  ['Equipment', 'Capacity', 'Peak Holders', 'Total Acquires', 'Wait Events'].forEach(h => {
+    const th = document.createElement('th');
+    th.textContent = h;
+    rth.appendChild(th);
+  });
+  const rtb = resTable.createTBody();
+  resources.forEach(res => {
+    const tr = rtb.insertRow();
+    [res.id.replace(/_/g, ' '), res.capacity, res.max_simultaneous_holders, res.acquisitions, res.wait_events].forEach(v => {
+      const td = tr.insertCell();
+      td.textContent = v ?? 0;
+    });
+  });
+
+  // Checks
+  const checks = r.results.checks;
+  resEl.replaceChildren(resHeading, resTable);
+  if (checks) {
+    const checksDiv = document.createElement('div');
+    checksDiv.className = 'checks-row';
+    checksDiv.innerHTML = `
+      <span class="${checks.exclusivity_violations > 0 ? 'check-fail' : 'check-ok'}">Exclusivity violations: ${checks.exclusivity_violations}</span>
+      <span class="${checks.unresolved_deadlocks > 0 ? 'check-fail' : 'check-ok'}">Unresolved deadlocks: ${checks.unresolved_deadlocks}</span>
+      <span class="check-ok">Orders completed: ${checks.completed_count}</span>
+    `;
+    resEl.append(checksDiv);
+  }
 }
 
 // Helper to draw clean high-contrast rounded HUD pill badges
@@ -1185,7 +1516,6 @@ function init() {
   $('fs-restart-btn')?.addEventListener('click', () => seek(0));
   $('fs-speed-btn')?.addEventListener('click', changeSpeed);
 
-  $('load-more')?.addEventListener('click', showCases);
   $('close-modal')?.addEventListener('click', () => $('case-modal')?.classList.add('hidden'));
   $('case-modal')?.addEventListener('click', e => {
     if (e.target.id === 'case-modal') e.currentTarget.classList.add('hidden');

@@ -16,7 +16,7 @@
     <section id="simulator" class="simulator" aria-label="Simulation viewer">
       <div class="sim-heading">
         <div class="title-row"><h1 id="run-title">Dinner service</h1><span id="origin-badge" class="origin-badge">SYNTHETIC EXAMPLE</span><span id="run-meta" class="run-meta"></span></div>
-        <div class="header-buttons"><button id="load-more" class="menu-button">☰ MENU</button></div>
+        <div class="header-buttons"></div>
       </div>
 
       <section class="control-strip card">
@@ -122,7 +122,18 @@
         <input id="timeline" class="timeline" type="range" min="0" max="0" value="0" aria-label="Simulation frame">
         <div class="timeline-labels"><span>ORDER OF EVENTS</span><span id="timeline-end">END OF SERVICE</span></div>
       </section>
-      <section class="results-strip"><div class="results-title"><span class="eyebrow">AFTER THE RUSH</span><strong>Run results</strong></div><div id="summary-stats" class="summary-stats"></div><button id="save-button" class="secondary-button save-button">↓ Save recording</button></section>
+      <section class="results-panel card">
+        <div class="results-panel-header">
+          <div>
+            <span class="eyebrow">AFTER THE RUSH</span>
+            <h2>Run Metrics</h2>
+          </div>
+          <button id="save-button" class="secondary-button save-button">↓ Save recording</button>
+        </div>
+        <div class="summary-stats-row" id="summary-stats"></div>
+        <div class="per-process-results" id="per-process-results"></div>
+        <div class="resource-results" id="resource-results"></div>
+      </section>
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

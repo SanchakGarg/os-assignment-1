@@ -410,3 +410,143 @@
   color: #634316 !important;
   font-weight: 600 !important;
 }
+
+
+/* ── Results Panel ─────────────────────────────────────────────────────────── */
+.results-panel {
+  margin-top: 13px;
+  padding: 18px 20px 20px;
+}
+
+.results-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.results-panel-header h2 {
+  margin: 4px 0 0;
+  font: 500 22px var(--serif);
+}
+
+/* Summary stat cards */
+.summary-stats-row {
+  display: flex;
+  gap: 0;
+  flex-wrap: wrap;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.stat {
+  flex: 1;
+  min-width: 110px;
+  padding: 12px 16px;
+  border-right: 1px solid var(--line);
+  background: var(--card);
+  cursor: default;
+}
+
+.stat:last-child { border-right: none; }
+
+.stat span {
+  display: block;
+  font: 9px var(--mono);
+  letter-spacing: .07em;
+  color: #849188;
+  margin-bottom: 4px;
+}
+
+.stat strong {
+  display: block;
+  font: 500 22px var(--serif);
+  color: var(--ink);
+}
+
+.stat small {
+  display: block;
+  font: 8px var(--mono);
+  color: #aab5ae;
+  margin-top: 2px;
+}
+
+/* Per-process metrics table */
+.metrics-section-title {
+  font: 9px var(--mono);
+  letter-spacing: .1em;
+  color: #849188;
+  text-transform: uppercase;
+  margin: 0 0 8px;
+}
+
+.metrics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-bottom: 20px;
+}
+
+.metrics-table th {
+  text-align: right;
+  padding: 6px 10px;
+  font: 9px var(--mono);
+  letter-spacing: .05em;
+  color: #849188;
+  background: #f6f6f0;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.metrics-table th:first-child,
+.metrics-table td:first-child {
+  text-align: left;
+  font-weight: 700;
+  padding-left: 0;
+}
+
+.metrics-table td {
+  text-align: right;
+  padding: 7px 10px;
+  border-bottom: 1px solid #f0ede5;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.metrics-table tbody tr:hover td {
+  background: #f7f9f6;
+}
+
+.metrics-avg-row td {
+  font-weight: 700;
+  background: #edf4eb;
+  border-top: 1.5px solid #c0d8b8;
+  color: #2a5e3a;
+}
+
+.metrics-avg-row td:first-child {
+  font: 9px var(--mono);
+  letter-spacing: .07em;
+}
+
+/* Resource results */
+.checks-row {
+  display: flex;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  font: 11px var(--mono);
+}
+
+.check-ok  { color: #3a7a50; }
+.check-fail { color: #b03535; font-weight: 700; }
+
+.metrics-pending {
+  font: 11px var(--mono);
+  color: #aab5ae;
+  padding: 12px 0;
+  margin: 0;
+}
