@@ -12,6 +12,7 @@ const char *state_name(State s)
     case READY:          return "READY";
     case RUNNING:        return "RUNNING";
     case TERMINATED:     return "TERMINATED";
+    case BLOCKED_RESOURCE: return "BLOCKED_RESOURCE";
     }
     return "?";
 }
@@ -24,6 +25,8 @@ const char *event_name(EventType e)
     case EV_MEMORY_ADMIT: return "MEMORY_ADMIT";
     case EV_DISPATCH:     return "DISPATCH";
     case EV_COMPLETE:     return "COMPLETE";
+    case EV_RESOURCE_BLOCK:   return "RESOURCE_BLOCK";
+    case EV_RESOURCE_UNBLOCK: return "RESOURCE_UNBLOCK";
     }
     return "?";
 }

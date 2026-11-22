@@ -143,7 +143,8 @@ static void pool_result(PoolResult *r, const Pool *pool, int elapsed)
  * A2 results (spec section 7). For order i with arrival A, memory admission M,
  * first start S, completion C and service B:
  *   turnaround = C - A, response = S - A, waiting = C - A - B,
- *   memory wait = M - A, ready wait = waiting - memory wait.
+ *   memory wait = M - A, resource wait = time spent in BLOCKED_RESOURCE,
+ *   ready wait = waiting - memory wait - resource wait (final spec section 7).
  * E = last completion - first arrival; throughput = N / E;
  * chef utilization = sum(B) / (2E); pool utilization = occupied slot-time / (KE).
  * Returns 0, or -1 if out of memory.
@@ -171,8 +172,8 @@ int collect_results(const Process *p, int n, const Memory *mem, SimulationResult
         r->waiting = waiting(&p[i]);
         r->response = response(&p[i]);
         r->mem_wait = p[i].mem_admit - p[i].arrival;
-        r->ready_wait = r->waiting - r->mem_wait;
-        r->resource_wait = 0;
+        r->resource_wait = p[i].resource_wait;
+        r->ready_wait = r->waiting - r->mem_wait - r->resource_wait;
 
         total_wait += r->waiting;
         total_turn += r->turnaround;
@@ -198,7 +199,7 @@ int collect_results(const Process *p, int n, const Memory *mem, SimulationResult
     pool_result(&out->pools[0], &mem->space, elapsed);
     pool_result(&out->pools[1], &mem->table, elapsed);
 
-    out->checks.completed_count = n;   /* A3 CHECK rows; no resources yet */
+    out->checks.completed_count = n;   /* A3 CHECK rows; resources.c adds the rest */
     out->complete = 1;
     return 0;
 }

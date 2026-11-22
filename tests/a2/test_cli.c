@@ -28,7 +28,7 @@ int main(void)
     EXPECT(run(5, basic, &o, &e) == 0, "four positional arguments");
     EXPECT(o.config.scheduler == SCHED_FCFS && o.config.allocator == ALLOC_FIRST_FIT,
            "FCFS + FIRST_FIT");
-    EXPECT(o.config.phase == PHASE_A2 && o.trace_path == NULL, "defaults: a2, no trace");
+    EXPECT(o.config.phase == PHASE_A3 && o.trace_path == NULL, "defaults: a3, no trace");
     EXPECT(strcmp(o.input_path, "case.txt") == 0 && strcmp(o.output_path, "result.csv") == 0,
            "paths");
 

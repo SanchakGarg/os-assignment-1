@@ -48,6 +48,8 @@ void print_usage(const char *program)
         "Options:\n"
         "  --phase a2|a3     output format/phase (default: %s)\n"
         "  --trace FILE      also write the JSON recording for the browser viewer\n"
+        "  --log FILE|-      write the resource-event trace (- = stderr)\n"
+        "  --unsafe-demo     deadlock prevention OFF: bounded circular-wait demo\n"
         "  --help            show this message\n",
         program, program, DEFAULT_PHASE == PHASE_A2 ? "a2" : "a3");
 }
@@ -84,6 +86,14 @@ int parse_cli_args(int argc, char **argv, CliOptions *out, Error *error)
                          "unknown phase \"%s\" (expected a2 or a3)", value);
                 return -1;
             }
+        } else if (strcmp(arg, "--log") == 0) {
+            if (i + 1 >= argc) {
+                snprintf(error->message, sizeof error->message, "--log needs a file path or -");
+                return -1;
+            }
+            out->config.resource_log = argv[++i];
+        } else if (strcmp(arg, "--unsafe-demo") == 0) {
+            out->config.unsafe_demo = 1;
         } else if (strcmp(arg, "--trace") == 0) {
             if (i + 1 >= argc) {
                 snprintf(error->message, sizeof error->message, "--trace needs a file path");
@@ -104,9 +114,11 @@ int parse_cli_args(int argc, char **argv, CliOptions *out, Error *error)
     }
 
     if (npos == 2) {                    /* A1 legacy form: INPUT_FILE SCHEDULER */
-        if (out->trace_path != NULL || phase_given) {
+        if (out->trace_path != NULL || phase_given || out->config.resource_log ||
+            out->config.unsafe_demo) {
             snprintf(error->message, sizeof error->message,
-                     "--phase/--trace need the A2 form: INPUT_FILE SCHEDULER ALLOCATOR OUTPUT_FILE");
+                     "--phase/--trace/--log/--unsafe-demo need the A2 form: "
+                     "INPUT_FILE SCHEDULER ALLOCATOR OUTPUT_FILE");
             return -1;
         }
         out->legacy_a1 = 1;

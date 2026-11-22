@@ -9,7 +9,8 @@
 #include "restaurant.h"
 
 /* exit codes */
-enum { EXIT_BAD_ARGS = 1, EXIT_BAD_INPUT = 2, EXIT_SIM_FAILED = 3, EXIT_WRITE_FAILED = 4 };
+enum { EXIT_BAD_ARGS = 1, EXIT_BAD_INPUT = 2, EXIT_SIM_FAILED = 3, EXIT_WRITE_FAILED = 4,
+       EXIT_DEADLOCK = 5 };
 
 /* Gantt chart of the schedule just simulated, on the same 0-based axis as gantt_chart.
  * Returns 0 on success, -1 if the schedule can't be charted. */
@@ -83,7 +84,11 @@ static int run_a1(const char *file, SchedulerKind scheduler)
     pool_init(&mem.space, "SPACE", SPACE_CAPACITY);
     pool_init(&mem.table, "TABLE", TABLE_CAPACITY);
 
-    simulate(p, n, pickers[scheduler], first_fit, &mem, NULL, NULL);   /* A1: no slots */
+    Error error = {0};
+    if (simulate(p, n, pickers[scheduler], first_fit, &mem, NULL, NULL, NULL, &error) != 0) {
+        fprintf(stderr, "Simulation error: %s\n", error.message);   /* A1: no slots */
+        return 1;
+    }
     /* Only for a terminal: piped/redirected output stays the plain CSV report. */
     int terminal = isatty(STDOUT_FILENO);
     print_results(p, n, terminal, file, algorithm);
@@ -112,12 +117,12 @@ static int run_standard(const CliOptions *opt)
         return EXIT_BAD_INPUT;
     }
     int status = read_process_section(in, &w, &error);
-    if (status == 0 && expect_only_blank_lines(in, &error) != 0) {
+    if (status == 0) {
         if (opt->config.phase == PHASE_A3)
-            snprintf(error.message, sizeof error.message,
-                     "resource/action sections are not supported yet");
-        workload_free(&w);
-        status = -1;
+            status = read_resource_sections(in, &w, &error);
+        else
+            status = expect_only_blank_lines(in, &error);
+        if (status != 0) workload_free(&w);
     }
     fclose(in);
     if (status != 0) {
@@ -130,6 +135,13 @@ static int run_standard(const CliOptions *opt)
 
     status = simulate_workload(&w, &opt->config, NULL, NULL, &result, &error);
     workload_free(&w);
+    if (status == -2) {
+        fprintf(stderr, "DEADLOCK DETECTED%s: %s\n",
+                opt->config.unsafe_demo ? " (unsafe demo, prevention off)" : "", error.message);
+        fprintf(stderr, "The run was stopped and every worker thread released; "
+                        "no result file was written.\n");
+        return EXIT_DEADLOCK;
+    }
     if (status != 0) {
         print_error("Simulation error", &error);
         return EXIT_SIM_FAILED;

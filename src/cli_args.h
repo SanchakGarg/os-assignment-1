@@ -6,19 +6,22 @@
 /*
  * Command line (Anam):
  *   restaurant INPUT_FILE SCHEDULER ALLOCATOR OUTPUT_FILE [--phase a2|a3] [--trace TRACE.json]
+ *              [--log FILE|-] [--unsafe-demo]
  *   restaurant INPUT_FILE SCHEDULER          <- A1 legacy form, unchanged A1 behaviour
  *
  *   SCHEDULER: FCFS | PRIORITY | SJF            (case-insensitive)
  *   ALLOCATOR: FIRST_FIT | BEST_FIT | WORST_FIT (case-insensitive)
- *   --phase   : defaults to DEFAULT_PHASE (a2 in the A2 release)
+ *   --phase   : defaults to DEFAULT_PHASE (a3 in the final release)
  *   --trace   : optional JSON recording path for Abhinav's writer; no trace if absent
+ *   --log     : resource-event trace (thread, virtual time, order, equipment); "-" = stderr
+ *   --unsafe-demo : turn deadlock prevention off for the bounded circular-wait demo
  * The 2-argument form keeps the A1 program (5-field input, report on stdout,
  * Gantt chart in a terminal) so tests/edge/check_rows.sh and gantt_chart work.
  * Options may appear before, between or after the positional arguments.
  */
 
 #ifndef DEFAULT_PHASE
-#define DEFAULT_PHASE PHASE_A2
+#define DEFAULT_PHASE PHASE_A3
 #endif
 
 typedef struct {
