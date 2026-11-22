@@ -9,9 +9,13 @@
  */
 namespace ws {
 
-/* Reads the HTTP upgrade request and replies 101. Returns false if it was
- * not a valid WebSocket request (a 400 reply is sent). */
+/* Reads the HTTP request. A WebSocket upgrade from an allowed origin gets 101
+ * and returns true. Anything else returns false after a reply: a plain GET is
+ * answered with a viewer file (static_files.hpp), a foreign origin with 403. */
 bool handshake(int fd);
+
+/* Writes all of buf. Returns false if the client has gone. */
+bool write_all(int fd, const void *buf, size_t len);
 
 enum class ReadResult { Message, Closed };
 

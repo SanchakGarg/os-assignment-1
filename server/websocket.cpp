@@ -1,11 +1,14 @@
 #include "websocket.hpp"
 
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include <cctype>
 #include <cstdint>
 #include <cstring>
+
+#include "static_files.hpp"
 
 namespace ws {
 namespace {
@@ -85,22 +88,6 @@ bool read_exact(int fd, void *buf, size_t len)
     return true;
 }
 
-bool write_all(int fd, const void *buf, size_t len)
-{
-    const char *p = static_cast<const char *>(buf);
-    while (len > 0) {
-#ifdef MSG_NOSIGNAL
-        ssize_t sent = send(fd, p, len, MSG_NOSIGNAL);
-#else
-        ssize_t sent = send(fd, p, len, 0);   /* SIGPIPE ignored in main() */
-#endif
-        if (sent <= 0) return false;
-        p += sent;
-        len -= (size_t)sent;
-    }
-    return true;
-}
-
 bool send_frame(int fd, uint8_t opcode, const std::string &payload)
 {
     std::string header;
@@ -116,8 +103,8 @@ bool send_frame(int fd, uint8_t opcode, const std::string &payload)
         header += (char)127;
         for (int i = 7; i >= 0; i--) header += (char)((uint64_t)len >> (i * 8));
     }
-    return write_all(fd, header.data(), header.size()) &&
-           write_all(fd, payload.data(), payload.size());
+    header += payload;                               /* one write: no Nagle/delayed-ACK stall */
+    return write_all(fd, header.data(), header.size());
 }
 
 std::string header_value(const std::string &request, const std::string &name)
@@ -141,21 +128,75 @@ std::string header_value(const std::string &request, const std::string &name)
     return "";
 }
 
+void set_receive_timeout(int fd, int seconds)
+{
+    timeval tv = { seconds, 0 };
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv);
+}
+
+bool loopback_host(const std::string &host)
+{
+    for (const char *name : { "127.0.0.1", "localhost" }) {
+        size_t len = std::strlen(name);
+        if (host.compare(0, len, name) == 0 && (host.size() == len || host[len] == ':'))
+            return true;
+    }
+    return false;
+}
+
+/* Pages opened from disk (Origin "null"), tools without an Origin, and the
+ * viewer served by this server may connect; other websites may not. */
+bool origin_allowed(const std::string &request)
+{
+    std::string origin = header_value(request, "Origin");
+    if (origin.empty() || origin == "null") return true;
+    std::string host = header_value(request, "Host");
+    return loopback_host(host) && origin == "http://" + host;
+}
+
 }  // namespace
+
+bool write_all(int fd, const void *buf, size_t len)
+{
+    const char *p = static_cast<const char *>(buf);
+    while (len > 0) {
+#ifdef MSG_NOSIGNAL
+        ssize_t sent = send(fd, p, len, MSG_NOSIGNAL);
+#else
+        ssize_t sent = send(fd, p, len, 0);   /* SIGPIPE ignored in main() */
+#endif
+        if (sent <= 0) return false;
+        p += sent;
+        len -= (size_t)sent;
+    }
+    return true;
+}
 
 bool handshake(int fd)
 {
     std::string request;
     char c;
+    set_receive_timeout(fd, 10);             /* an idle connection must not hold a thread */
     while (request.size() < 8192 && request.find("\r\n\r\n") == std::string::npos) {
         if (recv(fd, &c, 1, 0) != 1) return false;
         request += c;
     }
+    set_receive_timeout(fd, 0);
 
-    std::string key = header_value(request, "Sec-WebSocket-Key");
-    if (request.compare(0, 4, "GET ") != 0 || key.empty()) {
+    if (request.compare(0, 4, "GET ") != 0) {
         std::string reply = "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain\r\n"
                             "Connection: close\r\n\r\nThis is a WebSocket server.\n";
+        write_all(fd, reply.data(), reply.size());
+        return false;
+    }
+    std::string key = header_value(request, "Sec-WebSocket-Key");
+    if (key.empty()) {                       /* a plain page request: the viewer */
+        serve_static(fd, request);
+        return false;
+    }
+    if (!origin_allowed(request)) {
+        std::string reply = "HTTP/1.1 403 Forbidden\r\nContent-Type: text/plain\r\n"
+                            "Connection: close\r\n\r\nOrigin not allowed.\n";
         write_all(fd, reply.data(), reply.size());
         return false;
     }

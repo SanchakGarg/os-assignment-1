@@ -3,7 +3,8 @@
  *
  *   ./restaurant_server [PORT]        (default 8080, listens on 127.0.0.1)
  *
- * Each browser connection gets its own thread running run_session().
+ * Each browser connection gets its own thread running run_session(). The
+ * same port serves the viewer page from ./web (http://127.0.0.1:PORT/).
  * The protocol is described in docs/server.md.
  */
 #include <arpa/inet.h>
@@ -17,6 +18,7 @@
 #include <thread>
 
 #include "session.hpp"
+#include "static_files.hpp"
 
 int main(int argc, char **argv)
 {
@@ -44,6 +46,11 @@ int main(int argc, char **argv)
         return 1;
     }
     std::printf("Restaurant server listening on ws://127.0.0.1:%d\n", port);
+    if (viewer_available())
+        std::printf("Viewer: http://127.0.0.1:%d/\n", port);
+    else
+        std::printf("Warning: ./web/index.html not found, so the viewer is not served. "
+                    "Start the server from the repository root, or open web/index.html directly.\n");
     std::fflush(stdout);
 
     for (;;) {
