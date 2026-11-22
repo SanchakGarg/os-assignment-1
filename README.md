@@ -23,6 +23,7 @@ The three questions the system answers:
 ```
 src/        the simulator
 server/     C++ WebSocket backend for the web simulator
+web/        pixel-art browser visualiser (served by restaurant_server)
 tools/      helper programs (gantt_chart, check_input)
 tests/a1/   A1 edge cases, expected rows, comparison workload, Gantt test
 tests/a2/   A2 unit tests, valid/invalid inputs, edge cases, comparison workload
@@ -58,6 +59,7 @@ docs/       input/output notes, edge-case notes, final-project samples
 | `docs/final-samples.md` | Final-project samples and hand traces |
 | `server/` | WebSocket backend: the browser picks scheduler/allocator, sends orders, and receives the simulation step by step (`make server`, see `docs/server.md`) |
 | `docs/server.md` | Server protocol: messages, frame format, pacing controls |
+| `web/` | Pixel-art visualiser: the whole restaurant animated cycle by cycle, with plain-English narration (see "Web visualiser" below) |
 
 ## Compile
 
@@ -127,6 +129,40 @@ sh tests/a1/gantt_chart_test.sh    # Gantt chart generator checks
 ```
 
 `--phase a2` gives exactly the A2 result file (13 PROCESS fields, no RESOURCE/CHECK rows) and the strict A2 input rule that nothing may follow the N process rows. Without it the same run gives the final format, with `RESOURCE_WAIT=0` and the CHECK rows appended.
+
+### Web visualiser (for demonstrations)
+
+```
+make server
+./restaurant_server            # run from the repository root
+# open http://127.0.0.1:8080/
+```
+
+The page is a pixel-art restaurant that fills the screen. A start menu sets up the run:
+
+- **Scenario:** one of the sample inputs from `tests/`, each with a note on what it shows. You can also upload a `.txt` file or edit the input in place. Input errors from the server show the message and highlight the line.
+- **CPU scheduling:** FCFS, PRIORITY or SJF.
+- **Memory allocation:** First, Best or Worst Fit.
+- **Deadlock handling:** prevention ON, or OFF (the unsafe demo).
+- **Clock-cycle length:** 1 s by default, 0.25–3 s.
+
+The server runs the real simulator (the same code as `./restaurant`) and sends every frame. The browser then plays it back one clock cycle at a time:
+
+| On screen | OS idea |
+| --- | --- |
+| A party of customers per order (party size = seats needed) arrives on the street | process arrival |
+| The line outside the door, with an ID sign over each party ("3S 2T" = 3 seats, 2 tables) | FIFO memory queue (`BLOCKED_MEMORY`) |
+| Seats 0–5 and tables T0–T2; a party sits on adjacent seats and its tables take its colour. On admission the free gaps flash yellow and the chosen gap green | contiguous SPACE / TABLE pools, First/Best/Worst Fit |
+| Ticket rail, sorted by the scheduler, with the field it uses highlighted | READY queue |
+| Two chefs with a bubble showing the order and its progress | 2 CPUs, non-preemptive |
+| A chef walks to the oven, microwave or coffee machine within one cycle, and the machine shows its holder | resource acquire/release by the worker threads |
+| A red "WAIT" tag above a machine; the order's chef walks away | `BLOCKED_RESOURCE`, hold and wait |
+| Red arrows between machines and a deadlock screen with the wait-for cycle | circular wait, detected (prevention OFF) |
+| A "ROLLBACK" popup | deadlock prevention by ordered acquisition |
+
+A caption under the scene explains every event of the current cycle in plain English. The timeline shows who used each chef and machine in every cycle, and clicking it jumps to that cycle. The LOG drawer has the full history, a live table of orders and a legend. At the end a results screen shows the per-order metrics, pool and machine statistics, and a CSV download of the graded result file.
+
+Controls: Space play/pause, ← → previous/next cycle, − + cycle length, R restart, M menu, L log, G timeline. URL options make a demo or screenshot start straight away, for example `http://127.0.0.1:8080/?scenario=deadlock&unsafe=1&autostart=1`. Other options are `sched`, `alloc`, `speed`, and `seek`/`phase` (freeze at a moment). The page also works when opened directly from disk (`web/index.html`), and then connects to `ws://127.0.0.1:8080`. Fonts come from Google Fonts, with a monospace fallback offline.
 
 
 # Final Project: Concurrency and Integrated Simulation
