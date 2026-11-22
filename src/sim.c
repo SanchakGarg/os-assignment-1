@@ -34,10 +34,11 @@ static int q_head, q_len;
 
 static SimEvent *events;        /* what happened at the current time, for on_step */
 static int event_count, event_cap;
+static int *executed;           /* per order, for on_step: service done by the current time */
 
 static ResourceSystem *rs;      /* NULL when there is no equipment */
 
-static void record(EventType type, int order, int chef)
+static void record(EventType type, int order, int chef, int resource)
 {
     if (event_count == event_cap) {
         SimEvent *grown = realloc(events, (size_t)event_cap * 2 * sizeof *events);
@@ -45,7 +46,7 @@ static void record(EventType type, int order, int chef)
         events = grown;
         event_cap *= 2;
     }
-    events[event_count++] = (SimEvent){ type, order, chef };
+    events[event_count++] = (SimEvent){ type, order, chef, resource };
 }
 
 static int done_units(const Process *o) { return o->service - o->remaining; }
@@ -62,7 +63,7 @@ static void complete(Process *p, int i, int t, Memory *mem, int chef)
     o->completion = t;
     pool_release(&mem->space, o->space_at, o->space_req);
     pool_release(&mem->table, o->table_at, o->table_req);
-    record(EV_COMPLETE, i, chef);
+    record(EV_COMPLETE, i, chef, -1);
     if (chef >= 0) chef_order[chef] = -1;
 }
 
@@ -90,6 +91,25 @@ static void start_stretch(Process *p, int c, int t)
     chef_end[c] = t + stop - done_units(o);
 }
 
+static int chef_of(int order)
+{
+    for (int c = 0; c < CHEFS; c++)
+        if (chef_order[c] == order) return c;
+    return -1;
+}
+
+/* Equipment operations the workers just did, as events for on_step. */
+static void record_equipment_events(void)
+{
+    static const EventType types[] = { EV_RESOURCE_ACQUIRE, EV_RESOURCE_WAIT,
+                                       EV_RESOURCE_RELEASE, EV_RESOURCE_ROLLBACK };
+    ResEvent batch[32];
+    int got;
+    while ((got = rs_take_events(rs, batch, 32)) > 0)
+        for (int k = 0; k < got; k++)
+            record(types[batch[k].kind], batch[k].order, chef_of(batch[k].order), batch[k].resource);
+}
+
 /* Steps 1 and 2. Returns 1 if anything changed, -1 if the workers failed. */
 static int run_actions(Process *p, int n, int t, Error *error)
 {
@@ -103,6 +123,7 @@ static int run_actions(Process *p, int n, int t, Error *error)
     if (m > 0) {
         rs_set_time(rs, t);
         if (rs_run(rs, round, m, error) != 0) return -1;
+        record_equipment_events();
         changed = 1;
     }
     for (int c = 0; c < CHEFS; c++) {
@@ -110,8 +131,9 @@ static int run_actions(Process *p, int n, int t, Error *error)
         if (i < 0 || rs_status(rs, i) != WORKER_BLOCKED) continue;
         p[i].state = BLOCKED_RESOURCE;
         p[i].blocked_since = t;
+        p[i].blocked_on = rs_waiting_for(rs, i);
         chef_order[c] = -1;
-        record(EV_RESOURCE_BLOCK, i, c);
+        record(EV_RESOURCE_BLOCK, i, c, p[i].blocked_on);
         snprintf(detail, sizeof detail, "gives up chef %d, keeps its memory", c);
         rs_trace(rs, i, "BLOCKED_RESOURCE", -1, detail);
         changed = 1;
@@ -120,7 +142,7 @@ static int run_actions(Process *p, int n, int t, Error *error)
         if (p[i].state != BLOCKED_RESOURCE || rs_status(rs, i) != WORKER_IDLE) continue;
         p[i].state = READY;
         p[i].resource_wait += t - p[i].blocked_since;
-        record(EV_RESOURCE_UNBLOCK, i, -1);
+        record(EV_RESOURCE_UNBLOCK, i, -1, p[i].blocked_on);
         snprintf(detail, sizeof detail, "READY again after waiting %d", t - p[i].blocked_since);
         rs_trace(rs, i, "UNBLOCK", -1, detail);
         changed = 1;
@@ -159,7 +181,7 @@ static void queue_arrivals(Process *p, int n, int t)
     for (int i = 0; i < n; i++) {
         if (p[i].state != NEW || p[i].arrival > t) continue;
         p[i].state = BLOCKED_MEMORY;
-        record(EV_ARRIVE, i, -1);
+        record(EV_ARRIVE, i, -1, -1);
         int j = q_len++;
         while (j > first && strcmp(p[queue[j - 1]].id, p[i].id) > 0) {
             queue[j] = queue[j - 1];
@@ -192,7 +214,7 @@ static int admit_from_queue(Process *p, int t, Memory *mem, Placer place)
         Process *o = &p[queue[q_head]];
         o->state = READY;
         o->mem_admit = t;
-        record(EV_MEMORY_ADMIT, queue[q_head++], -1);
+        record(EV_MEMORY_ADMIT, queue[q_head++], -1, -1);
         admitted++;
     }
     return admitted;
@@ -209,7 +231,7 @@ static int assign_chefs(Process *p, int n, int t, Picker pick)
         p[i].state = RUNNING;
         chef_order[c] = i;
         chef_end[c] = -1;
-        record(EV_DISPATCH, i, c);
+        record(EV_DISPATCH, i, c, -1);
         assigned++;
     }
     return assigned;
@@ -238,8 +260,16 @@ static int next_event(Process *p, int n)
 static void report(Process *p, int n, int t, Memory *mem, SnapshotFn on_step, void *ctx)
 {
     if (on_step && event_count > 0) {
+        int stretch_end[CHEFS];
+        for (int i = 0; i < n; i++)
+            executed[i] = done_units(&p[i]);      /* exact except mid-stretch, fixed below */
+        for (int c = 0; c < CHEFS; c++) {
+            stretch_end[c] = chef_order[c] >= 0 ? chef_end[c] : -1;
+            if (chef_order[c] >= 0 && chef_end[c] >= 0)
+                executed[chef_order[c]] = chef_stop[c] - (chef_end[c] - t);
+        }
         Snapshot s = { t, p, n, chef_order, mem, queue + q_head, q_len - q_head,
-                       events, event_count };
+                       events, event_count, executed, stretch_end, rs };
         on_step(&s, ctx);
     }
     event_count = 0;
@@ -262,7 +292,7 @@ static int settle(Process *p, int n, int t, Picker pick, Placer place, Memory *m
     } while (changed);
 
     for (int k = (q_head > queued_before ? q_head : queued_before); k < q_len; k++)
-        record(EV_MEMORY_BLOCK, queue[k], -1);    /* arrived now but did not fit */
+        record(EV_MEMORY_BLOCK, queue[k], -1, -1);    /* arrived now but did not fit */
     return finished;
 }
 
@@ -270,8 +300,10 @@ static void free_buffers(void)
 {
     free(queue);
     free(events);
+    free(executed);
     queue = NULL;
     events = NULL;
+    executed = NULL;
     rs = NULL;
 }
 
@@ -284,7 +316,8 @@ int simulate(Process *p, int n, Picker pick, Placer place, Memory *mem,
     queue = malloc((size_t)n * sizeof *queue);
     event_cap = 3 * n + 2 * CHEFS;
     events = malloc((size_t)event_cap * sizeof *events);
-    if (!queue || !events) {
+    executed = malloc((size_t)(n > 0 ? n : 1) * sizeof *executed);
+    if (!queue || !events || !executed) {
         free_buffers();
         snprintf(error->message, sizeof error->message, "out of memory for %d orders", n);
         return -1;
@@ -341,7 +374,7 @@ static void load_process(Process *o, const ProcessInput *in)
     o->service = o->remaining = in->service;
     o->space_req = in->space_req;
     o->table_req = in->table_req;
-    o->mem_admit = o->start = o->completion = o->blocked_since = -1;
+    o->mem_admit = o->start = o->completion = o->blocked_since = o->blocked_on = -1;
     o->state = NEW;
 }
 

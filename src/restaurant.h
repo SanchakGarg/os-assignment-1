@@ -20,6 +20,7 @@ typedef struct {
     int mem_admit;                /* time memory was granted */
     int start, completion;
     int blocked_since;            /* time it entered BLOCKED_RESOURCE */
+    int blocked_on;               /* resource it waits for (or last waited for), -1 if none */
     int resource_wait;            /* total time spent in BLOCKED_RESOURCE */
     State state;
 } Process;
@@ -34,12 +35,15 @@ typedef int (*Picker)(Process *p, int n, int t);
 
 /* What happened at one event time, for live viewers (e.g. the web server). */
 typedef enum { EV_ARRIVE, EV_MEMORY_BLOCK, EV_MEMORY_ADMIT, EV_DISPATCH, EV_COMPLETE,
-               EV_RESOURCE_BLOCK, EV_RESOURCE_UNBLOCK } EventType;
+               EV_RESOURCE_BLOCK, EV_RESOURCE_UNBLOCK,
+               EV_RESOURCE_ACQUIRE, EV_RESOURCE_WAIT, EV_RESOURCE_RELEASE,
+               EV_RESOURCE_ROLLBACK } EventType;
 
 typedef struct {
     EventType type;
     int order;                        /* index into the Process array */
     int chef;                         /* chef number, -1 if not about a chef */
+    int resource;                     /* equipment index, -1 if not about equipment */
 } SimEvent;
 
 /* The whole restaurant after all events at `time`. Pointers are valid only
@@ -54,6 +58,9 @@ typedef struct {
     int mem_queue_len;
     const SimEvent *events;
     int event_count;
+    const int *executed;              /* n entries: service units done by `time` */
+    const int *stretch_end;           /* CHEFS entries: when the current stretch ends, -1 if idle */
+    ResourceSystem *rs;               /* equipment state (rs_holder...), NULL if none */
 } Snapshot;
 
 typedef void (*SnapshotFn)(const Snapshot *s, void *ctx);
