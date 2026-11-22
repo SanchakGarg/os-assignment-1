@@ -1,10 +1,15 @@
 /*
- * The restaurant scene. Rendering is a pure function of (cycle t, phase):
- * every person, chef and ticket has a spot in the frame before t and in the
- * frame at t, and walks between them during a window of the cycle. So play,
- * pause, step back and seek all draw correctly without remembered state.
+ * The restaurant, as one room seen from above in the style of a handheld
+ * RPG interior: the kitchen in the top-left corner, the order board on the
+ * back wall, 6 waiting chairs in the bottom-left corner, 3 tables in the
+ * middle, and the door out to the street where the line forms.
  *
- * The picture is drawn at 512 x 288 world pixels, scaled up without
+ * Rendering is a pure function of (cycle t, phase): every person, chef and
+ * ticket has a spot in the frame before t and in the frame at t, and walks
+ * between them (along grid lines, facing the way it walks) during a window
+ * of the cycle. So play, pause, step back and seek all draw correctly.
+ *
+ * The picture is drawn at 512 x 288 world pixels and scaled up without
  * smoothing; text is drawn afterwards at screen resolution so it stays sharp.
  */
 (function () {
@@ -16,27 +21,31 @@
   });
 
   /* ---------- layout (world pixels) ---------- */
-  const COL_X = { COFFEE_MACHINE: 8, MICROWAVE: 58, OVEN_1: 108, OVEN_2: 158 };
-  const STOVE_X = [216, 266];
-  const MACHINE_Y = 18, COUNTER_Y = 46, FLOOR_Y = 60, CHEF_Y = 95, DIVIDER_Y = 104;
-  const RAIL = { x: 322, y: 2, w: 186, h: 58 }, SLOT_W = 36, SLOTS = 5;
-  const CHAIR_Y = 133, TABLE_Y = 137;
-  const WALL_Y = 196, WALK_Y = 214, ROAD_Y = 255;
-  const DOOR = { x: 238, w: 26 };
-  const DOOR_OUT = { x: 251, y: 238 }, DOOR_IN = { x: 251, y: 190 };
-  const SPAWN = { x: 306, y: 240 }, EXIT = { x: 545, y: 242 };
-  const QUEUE_Y = 241, QUEUE_RIGHT = 230, QUEUE_LEFT = 10, AISLE_Y = 176;
+  const MACH_X = { COFFEE_MACHINE: 8, MICROWAVE: 42, OVEN_1: 76, OVEN_2: 110, stove0: 144, stove1: 178 };
+  const MACH_Y = 24, WALL_H = 56, CHEF_Y = 100;
+  const COUNTER_Y = 112, COUNTER_X = 216;                /* L-shaped counter closing the kitchen */
+  const BOARD = { x: 252, y: 4, w: 204, h: 50 }, SLOT_W = 28, SLOTS = 7;
+  const TABLE_Y = 140, TABLE_W = 48;
+  const CHAIR_Y = 168;
+  const WALL_Y = 208, OUT_Y = 222, PATH_Y = 252;
+  const DOOR = { x: 248, w: 32 };
+  const DOOR_OUT = { x: 264, y: PATH_Y }, DOOR_IN = { x: 264, y: 200 }, AISLE_Y = 200;
+  const SPAWN = { x: 540, y: PATH_Y }, EXIT = { x: 548, y: PATH_Y + 3 };
+  const PICKUP = { x: 242, y: 140 };                     /* takeaway bags at the counter end */
+  const QUEUE_RIGHT = 238, QUEUE_LEFT = 8;
 
-  let seatDX = 36, tableDX = 80, tableW = 64;
-  const chairX = i => 20 + i * seatDX;
-  const tableX = j => 268 + j * tableDX;
-  const seatFeet = i => ({ x: chairX(i) + 10, y: CHAIR_Y + 15, zone: "seat" });
-  const stationSpot = key => ({ x: (key in COL_X ? COL_X[key] : STOVE_X[+key.slice(5)]) + 24, y: CHEF_Y });
+  let chairDX = 20, tableDX = 80;
+  const chairX = i => 16 + i * chairDX;
+  const tableX = j => 208 + j * tableDX;
+  const seatSpot = i => ({ x: chairX(i) + 8, y: CHAIR_Y + 12, zone: "seat" });
+  const tableFront = j => ({ x: tableX(j) + TABLE_W / 2, y: TABLE_Y + 50 });
+  const stationSpot = key => ({ x: MACH_X[key] + 16, y: CHEF_Y });
+  const tableName = j => `T${j + 1}`;
 
   /* ---------- canvases ---------- */
   let canvas, ctx, world, wctx, bg;
   let scale = 1, ox = 0, oy = 0, labels = [], overlay = [];
-  const FONT = '"Press Start 2P", ui-monospace, monospace';
+  const FONT = '"Jersey 10", ui-monospace, monospace';
 
   Sc.init = function (el) {
     canvas = el;
@@ -72,16 +81,15 @@
   /* Pool sizes come from the server's hello. */
   Sc.setPools = function (pools) {
     Sc.pools = pools;
-    seatDX = Math.min(36, Math.floor(216 / pools.SPACE));
+    chairDX = Math.min(20, Math.floor(130 / pools.SPACE));
     tableDX = Math.min(80, Math.floor(240 / pools.TABLE));
-    tableW = Math.min(64, tableDX - 12);
     bg = null;
   };
 
   /* ---------- helpers ---------- */
   const clamp01 = u => (u < 0 ? 0 : u > 1 ? 1 : u);
   const ease = u => (u < 0.5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2);
-  const R = Sp.rect;
+  const R = Sp.rect, BOX = Sp.box;
 
   function label(text, x, y, o) {
     labels.push(Object.assign({ text, x, y, size: 4, color: "#fff", align: "center", alpha: 1 }, o));
@@ -111,15 +119,17 @@
   }
   Sc.holes = holes;
 
-  /* Points along a polyline at window-relative progress. */
+  const dirOf = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx < 0 ? "left" : "right") : dy < 0 ? "up" : "down");
+
+  /* Position along one stage {pts, win} at this phase. */
   function along(path, phase) {
     const pts = path.pts;
     const u = ease(clamp01((phase - path.win[0]) / (path.win[1] - path.win[0])));
-    if (!path.len) {
+    if (path.len === undefined) {
       path.seg = [];
       path.len = 0;
       for (let k = 1; k < pts.length; k++) {
-        const d = Math.hypot(pts[k].x - pts[k - 1].x, pts[k].y - pts[k - 1].y);
+        const d = Math.abs(pts[k].x - pts[k - 1].x) + Math.abs(pts[k].y - pts[k - 1].y);
         path.seg.push(d);
         path.len += d;
       }
@@ -128,36 +138,61 @@
     for (let k = 0; k < path.seg.length; k++) {
       if (dist <= path.seg[k] || k === path.seg.length - 1) {
         const f = path.seg[k] ? Math.min(1, dist / path.seg[k]) : 1;
+        const a = pts[k], b = pts[k + 1];
         return {
-          x: pts[k].x + (pts[k + 1].x - pts[k].x) * f,
-          y: pts[k].y + (pts[k + 1].y - pts[k].y) * f,
+          x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f,
           moving: phase > path.win[0] && phase < path.win[1] && path.len > 0,
-          done: phase >= path.win[1],
-          u,
+          done: phase >= path.win[1], started: phase > path.win[0],
+          dir: dirOf(b.x - a.x, b.y - a.y), u,
         };
       }
       dist -= path.seg[k];
     }
-    return { x: pts[0].x, y: pts[0].y, moving: false, done: true, u };
+    return { x: pts[0].x, y: pts[0].y, moving: false, done: true, started: true, dir: "down", u };
   }
 
-  /* ---------- per-frame derived state (cached on the frame) ---------- */
+  /* Position along a path that may have stages with pauses between them. */
+  function follow(path, phase) {
+    const stages = path.stages || [path];
+    for (let s = 0; s < stages.length; s++) {
+      const st = stages[s];
+      if (phase < st.win[0]) {
+        if (s === 0) return Object.assign(along(st, st.win[0]), { moving: false, done: false, started: false, u: 0, pause: -1 });
+        return Object.assign(along(stages[s - 1], 1), { moving: false, done: false, started: true, pause: s - 1 });
+      }
+      if (phase < st.win[1]) return Object.assign(along(st, phase), { pause: null });
+    }
+    return Object.assign(along(stages[stages.length - 1], 1), { done: true, pause: null });
+  }
 
-  /* Where each waiting party stands on the sidewalk, head of the line at the door. */
+  /* An axis-aligned route: horizontal first, then vertical, through each point. */
+  function grid(points) {
+    const out = [points[0]];
+    for (let k = 1; k < points.length; k++) {
+      const a = out[out.length - 1], b = points[k];
+      if (a.x !== b.x && a.y !== b.y) out.push({ x: b.x, y: a.y });
+      out.push(b);
+    }
+    return out;
+  }
+
+  /* ---------- per-frame derived state ---------- */
+
+  /* Where each waiting party stands on the path, head of the line at the door. */
   function queueLayout(F) {
     if (F._q) return F._q;
     const q = F.queues.memory, meta = P.run.meta;
     const sizes = q.map(id => meta[id].space_req);
-    const total = sizes.reduce((a, n) => a + n * 9 + 10, 0);
+    const total = sizes.reduce((a, n) => a + n * 13 + 8, 0);
     const k = Math.min(1, (QUEUE_RIGHT - QUEUE_LEFT) / Math.max(1, total));
     const out = {};
     let right = QUEUE_RIGHT;
     q.forEach((id, idx) => {
-      const n = sizes[idx], sp = 9 * k;
+      const n = sizes[idx], sp = 13 * k;
       const members = [];
-      for (let j = 0; j < n; j++) members.push({ x: right - (n - 1 - j) * sp - 4, y: QUEUE_Y + (j % 2), zone: "queue" });
-      out[id] = { members, center: right - ((n - 1) * sp) / 2 - 4, pos: idx };
-      right -= n * sp + 10 * k;
+      for (let j = 0; j < n; j++) members.push({ x: right - (n - 1 - j) * sp - 7, y: PATH_Y, zone: "queue" });
+      out[id] = { members, center: right - ((n - 1) * sp) / 2 - 7, pos: idx };
+      right -= n * sp + 8 * k;
     });
     return (F._q = out);
   }
@@ -171,34 +206,43 @@
     }
     const seats = slotsOf(F.pools.SPACE, id);
     if (!seats.length) return null;
-    return seatFeet(seats[Math.min(j, seats.length - 1)]);
+    return seatSpot(seats[Math.min(j, seats.length - 1)]);
   }
 
-  function memberPath(a, b, j) {
-    const dx = j * 3 - 6;
-    const door = [{ x: DOOR_OUT.x + dx, y: DOOR_OUT.y }, { x: DOOR_IN.x + dx, y: DOOR_IN.y }];
-    const spawn = { x: SPAWN.x + j * 9, y: SPAWN.y + (j % 2) };
-    if (!a && b && b.zone === "queue") return { pts: [spawn, b], win: [0.22, 0.7], fadeIn: true };
-    if (!a && b) return { pts: [spawn, ...door, { x: b.x, y: AISLE_Y }, b], win: [0.25, 0.92], fadeIn: true };
-    if (a && b && a.zone === "queue" && b.zone === "queue") return { pts: [a, b], win: [0.3, 0.72] };
-    if (a && b && a.zone === "queue") return { pts: [a, ...door, { x: b.x, y: AISLE_Y }, b], win: [0.28, 0.92] };
-    if (a && !b) return { pts: [a, { x: a.x, y: AISLE_Y }, door[1], door[0], { x: EXIT.x + j * 9, y: EXIT.y }], win: [0.12, 0.8] };
-    return { pts: [a, b], win: [0.3, 0.8] };
+  /* Route for member j from spot a (previous frame) to b (this frame). */
+  function memberPath(a, b, j, id, prev) {
+    const lag = j * 0.025;                         /* party members follow in a line */
+    const w = (s, e) => [Math.min(0.95, s + lag), Math.min(0.99, e + lag)];
+    const spawn = { x: SPAWN.x + j * 14, y: PATH_Y };
+    if (!a && b && b.zone === "queue") return { pts: [spawn, b], win: w(0.22, 0.72), fadeIn: true };
+    if (!a && b) return { pts: grid([spawn, DOOR_OUT, DOOR_IN, { x: b.x, y: AISLE_Y }, b]), win: w(0.25, 0.93), fadeIn: true };
+    if (a && b && a.zone === "queue" && b.zone === "queue") return { pts: [a, b], win: w(0.3, 0.72) };
+    if (a && b && a.zone === "queue") return { pts: grid([a, DOOR_OUT, DOOR_IN, { x: b.x, y: AISLE_Y }, b]), win: w(0.3, 0.93) };
+    if (a && !b) {
+      /* served: go to the order's table (or the counter for takeaway), then out */
+      const tables = slotsOf(prev.pools.TABLE, id);
+      const stop = tables.length ? tableFront(tables[Math.min(j, tables.length - 1)]) : PICKUP;
+      const spot = { x: stop.x + (j % 3) * 8 - 8, y: stop.y + Math.floor(j / 3) * 6 };
+      return {
+        stages: [
+          { pts: grid([a, { x: a.x, y: AISLE_Y }, { x: spot.x, y: AISLE_Y }, spot]), win: w(0.06, 0.3) },
+          { pts: grid([spot, { x: spot.x, y: AISLE_Y }, DOOR_IN, DOOR_OUT, { x: EXIT.x + j * 14, y: PATH_Y }]), win: w(0.4, 0.86) },
+        ],
+        facePause: tables.length ? "up" : "left",
+      };
+    }
+    return { pts: grid([a, b]), win: w(0.3, 0.8) };
   }
 
-  /*
-   * Which spot each chef stands at in each frame: their stove, or the piece of
-   * equipment their order acquired most recently and still holds.
-   */
+  /* Which spot each chef stands at in each frame: their stove, or the machine
+   * their order acquired most recently and still holds. */
   function prepareChefSpots(run) {
     const last = {};
     for (const F of run.frames) {
-      for (const ev of F.events) {
-        if (ev.type === "RESOURCE_ACQUIRE") last[ev.process_id] = ev.resource;
-      }
+      for (const ev of F.events) if (ev.type === "RESOURCE_ACQUIRE") last[ev.process_id] = ev.resource;
       F.chefAt = F.chefs.map((o, c) => {
         if (!o) return "stove" + c;
-        const holds = F.byId[o].holds;
+        const holds = F.byId[o].holds.filter(r => r in MACH_X);
         if (last[o] && holds.includes(last[o])) return last[o];
         if (holds.length) return (last[o] = holds[holds.length - 1]);
         return "stove" + c;
@@ -213,24 +257,24 @@
     if (p.state === "READY") {
       const k = F.queues.ready.indexOf(id);
       const many = F.queues.ready.length > SLOTS;
-      if (many && k >= SLOTS - 1) return { kind: "more", x: RAIL.x + 6 + (SLOTS - 1) * SLOT_W, y: RAIL.y + 19 };
-      return { kind: "rail", k, x: RAIL.x + 6 + k * SLOT_W, y: RAIL.y + 19 };
+      if (many && k >= SLOTS - 1) return { kind: "more", x: BOARD.x + 8 + (SLOTS - 1) * SLOT_W, y: BOARD.y + 15 };
+      return { kind: "rail", k, x: BOARD.x + 8 + k * SLOT_W, y: BOARD.y + 15 };
     }
-    if (p.state === "BLOCKED_RESOURCE" && p.waits_for in COL_X) {
+    if (p.state === "BLOCKED_RESOURCE" && p.waits_for in MACH_X) {
       const res = F.resources.find(r => r.id === p.waits_for);
       const k = Math.max(0, res ? res.waiting.indexOf(id) : 0);
-      return { kind: "hook", k, x: COL_X[p.waits_for] + 2, y: 1 + Math.min(k, 1) * 9 };
+      return { kind: "hook", k, x: MACH_X[p.waits_for] + 1, y: 2 + Math.min(k, 1) * 10 };
     }
     if (p.state === "RUNNING") {
       const spot = stationSpot(F.chefAt[p.chef_id]);
-      return { kind: "chef", c: p.chef_id, x: spot.x - 14, y: CHEF_Y - 30 };
+      return { kind: "chef", c: p.chef_id, x: spot.x - 14, y: CHEF_Y - 37 };
     }
     return null;
   }
 
   /* Pool contents as shown at this phase: releases fade out, then new owners appear. */
-  function shownPool(prev, cur, phase) {
-    return cur.map((o, i) => (prev[i] === o ? o : phase < 0.15 ? prev[i] : phase < 0.4 ? null : o));
+  function shownPool(prev, cur, phase, release, take) {
+    return cur.map((o, i) => (prev[i] === o ? o : phase < release ? prev[i] : phase < take ? null : o));
   }
 
   /* ---------- background (static) ---------- */
@@ -239,153 +283,161 @@
     bg.width = W;
     bg.height = H;
     const g = bg.getContext("2d");
-    // kitchen wall: subway tiles
-    R(g, 0, 0, W, COUNTER_Y, "#e9eef0");
-    for (let y = 0; y < COUNTER_Y; y += 6) {
-      R(g, 0, y + 5, RAIL.x - 4, 1, "#cdd6da");
-      for (let x = (y / 6) % 2 ? 0 : 6; x < RAIL.x - 4; x += 12) R(g, x, y, 1, 5, "#cdd6da");
+    // dining floor: big polished tiles
+    for (let y = WALL_H; y < WALL_Y; y += 16)
+      for (let x = 0; x < W; x += 16) {
+        R(g, x, y, 16, 16, ((x + y) / 16) % 2 ? "#f4ecd8" : "#ece2c8");
+        R(g, x, y, 16, 1, "#e0d2b2");
+        R(g, x, y, 1, 16, "#e0d2b2");
+      }
+    // back wall of the dining room
+    R(g, COUNTER_X, 0, W - COUNTER_X, WALL_H, "#f4dcb0");
+    R(g, COUNTER_X, 0, W - COUNTER_X, 4, "#c89060");
+    for (let x = COUNTER_X; x < W; x += 8) R(g, x, 36, 4, 16, "#e8c898");
+    R(g, COUNTER_X, 34, W - COUNTER_X, 2, "#c89060");
+    R(g, COUNTER_X, WALL_H - 4, W - COUNTER_X, 4, "#a86c40");
+    R(g, COUNTER_X, WALL_H - 1, W - COUNTER_X, 1, "#283040");
+    // kitchen: white tiled wall and checker floor
+    R(g, 0, 0, COUNTER_X, WALL_H, "#f8f8ff");
+    for (let y = 0; y < WALL_H; y += 8) {
+      R(g, 0, y + 7, COUNTER_X, 1, "#d8dce8");
+      for (let x = (y / 8) % 2 ? 0 : 8; x < COUNTER_X; x += 16) R(g, x, y, 1, 7, "#d8dce8");
     }
-    R(g, 0, COUNTER_Y - 2, W, 2, "#b8c2c7");
-    // back counter
-    R(g, 0, COUNTER_Y, 316, 3, "#c5ccd3");
-    R(g, 0, COUNTER_Y + 3, 316, FLOOR_Y - COUNTER_Y - 3, "#7d8690");
-    R(g, 0, FLOOR_Y - 2, 316, 2, "#5c646d");
-    for (let x = 4; x < 316; x += 50) R(g, x, COUNTER_Y + 5, 42, 9, "#6c747d");
-    // kitchen floor: checker
-    for (let y = FLOOR_Y; y < DIVIDER_Y; y += 8)
-      for (let x = 0; x < W; x += 8) R(g, x, y, 8, 8, ((x + y) / 8) % 2 ? "#d8d2c6" : "#c2bbad");
-    // order rail: cork board
-    R(g, RAIL.x - 3, RAIL.y - 1, RAIL.w + 4, RAIL.h + 3, "#6b4a2f");
-    R(g, RAIL.x - 1, RAIL.y + 1, RAIL.w, RAIL.h - 1, "#c19461");
-    for (let k = 0; k < 60; k++) R(g, RAIL.x + ((k * 37) % RAIL.w), RAIL.y + 3 + ((k * 23) % (RAIL.h - 6)), 1, 1, "#a87a4b");
-    R(g, RAIL.x + 2, RAIL.y + 16, RAIL.w - 6, 2, "#8c99a3");
-    // fridge and sink on the right of the kitchen
-    R(g, 330, 64, 26, 38, "#dee2e6");
-    R(g, 331, 65, 24, 14, "#f1f3f5");
-    R(g, 331, 81, 24, 20, "#f1f3f5");
-    R(g, 352, 70, 2, 6, "#868e96");
-    R(g, 352, 85, 2, 8, "#868e96");
-    R(g, 366, 80, 44, 22, "#868e96");
-    R(g, 368, 82, 40, 6, "#adb5bd");
-    R(g, 386, 74, 3, 8, "#495057");
-    R(g, 386, 74, 8, 2, "#495057");
-    // divider counter between kitchen and dining room
-    R(g, 0, DIVIDER_Y, W, 14, "#6e4429");
-    R(g, 0, DIVIDER_Y, W, 3, "#b07a4a");
-    R(g, 0, DIVIDER_Y + 13, W, 1, "#4a2c19");
-    // dining floor: planks
-    for (let y = DIVIDER_Y + 14; y < WALL_Y; y += 6) {
-      R(g, 0, y, W, 6, (y / 6) % 2 ? "#c58f5c" : "#bd8754");
-      R(g, 0, y + 5, W, 1, "#a8744a");
-      for (let x = (y * 7) % 48; x < W; x += 48) R(g, x, y, 1, 5, "#a8744a");
+    R(g, 0, WALL_H - 1, COUNTER_X, 1, "#283040");
+    for (let y = WALL_H; y < COUNTER_Y; y += 8)
+      for (let x = 0; x < COUNTER_X; x += 8) R(g, x, y, 8, 8, ((x + y) / 8) % 2 ? "#dfe3ee" : "#c3c9d8");
+    // L-shaped counter (front face facing the room)
+    BOX(g, COUNTER_X, 40, 16, COUNTER_Y - 40 + 2, "#f0d8a8");
+    R(g, COUNTER_X + 1, 41, 14, 2, "#fff0d0");
+    BOX(g, 0, COUNTER_Y, COUNTER_X + 16, 8, "#f0d8a8");
+    R(g, 1, COUNTER_Y + 1, COUNTER_X + 14, 2, "#fff0d0");
+    BOX(g, 0, COUNTER_Y + 7, COUNTER_X + 16, 10, "#c89858");
+    for (let x = 6; x < COUNTER_X + 10; x += 24) R(g, x, COUNTER_Y + 10, 14, 4, "#b08040");
+    // order board on the back wall
+    BOX(g, BOARD.x - 3, BOARD.y - 2, BOARD.w + 6, BOARD.h + 4, "#8a5428");
+    R(g, BOARD.x, BOARD.y + 1, BOARD.w, BOARD.h - 2, "#d8a868");
+    for (let k = 0; k < 70; k++) R(g, BOARD.x + ((k * 37) % BOARD.w), BOARD.y + 3 + ((k * 23) % (BOARD.h - 6)), 1, 1, "#c09050");
+    // furniture along the walls
+    Sp.bookshelf(g, 470, 22);
+    Sp.plant(g, 492, 182);
+    Sp.plant(g, 440, 182);
+    // rugs: waiting corner and dining area
+    BOX(g, 6, 158, 144, 40, "#e8c860");
+    R(g, 9, 161, 138, 34, "#d05050");
+    for (let x = 12; x < 146; x += 8) R(g, x, 163, 4, 2, "#f0a0a0"), R(g, x, 191, 4, 2, "#f0a0a0");
+    BOX(g, 194, 128, 248, 56, "#e8c860");
+    R(g, 197, 131, 242, 50, "#5878c8");
+    for (let x = 200; x < 438; x += 8) R(g, x, 133, 4, 2, "#a8c0f0"), R(g, x, 177, 4, 2, "#a8c0f0");
+    Sp.plant(g, 0, 182);
+    // bottom wall with the door
+    R(g, 0, WALL_Y, W, OUT_Y - WALL_Y, "#c89060");
+    R(g, 0, WALL_Y, W, 3, "#e8b880");
+    R(g, 0, OUT_Y - 1, W, 1, "#283040");
+    R(g, 0, WALL_Y - 1, W, 1, "#283040");
+    BOX(g, DOOR.x - 2, WALL_Y - 1, DOOR.w + 4, OUT_Y - WALL_Y + 2, "#6a4020");
+    R(g, DOOR.x, WALL_Y, DOOR.w, OUT_Y - WALL_Y, "#f4ecd8");
+    R(g, DOOR.x + 2, WALL_Y + 6, DOOR.w - 4, 7, "#d04848");
+    R(g, DOOR.x + 2, WALL_Y + 6, DOOR.w - 4, 1, "#f08080");
+    // outside: grass, path, flowers, fence, tree
+    R(g, 0, OUT_Y, W, H - OUT_Y, "#88d070");
+    for (let k = 0; k < 90; k++) {
+      const x = (k * 53) % W, y = OUT_Y + 4 + ((k * 29) % (H - OUT_Y - 6));
+      R(g, x, y, 1, 2, "#68b050");
+      R(g, x + 2, y + 1, 1, 1, "#68b050");
     }
-    // rugs under the seats and the tables
-    R(g, 12, 126, 222, 46, "#7b3434");
-    R(g, 14, 128, 218, 42, "#8f3f3f");
-    R(g, 260, 126, 240, 46, "#2f4f6b");
-    R(g, 262, 128, 236, 42, "#365b7a");
-    // front wall with windows and the door
-    R(g, 0, WALL_Y, W, WALK_Y - WALL_Y, "#9c4a3a");
-    for (let y = WALL_Y; y < WALK_Y; y += 4)
-      for (let x = (y / 4) % 2 ? 0 : 6; x < W; x += 12) R(g, x, y + 3, 12, 1, "#7d3a2d"), R(g, x, y, 1, 3, "#7d3a2d");
-    for (const wx of [24, 112, 300, 396]) {
-      R(g, wx, WALL_Y + 3, 70, 10, "#5a3620");
-      R(g, wx + 2, WALL_Y + 4, 66, 8, "#9fd3e6");
-      R(g, wx + 2, WALL_Y + 4, 66, 2, "#c9ecf5");
-      R(g, wx + 34, WALL_Y + 4, 2, 8, "#5a3620");
+    R(g, 0, PATH_Y - 13, W, 24, "#c8b080");
+    R(g, 0, PATH_Y - 12, W, 22, "#e8d8a8");
+    R(g, DOOR.x - 2, OUT_Y, DOOR.w + 4, PATH_Y - 12 - OUT_Y, "#c8b080");
+    R(g, DOOR.x, OUT_Y, DOOR.w, PATH_Y - 12 - OUT_Y, "#e8d8a8");
+    for (let k = 0; k < 40; k++) R(g, (k * 41) % W, PATH_Y - 9 + ((k * 7) % 18), 2, 1, "#d0bc88");
+    for (const [x, y] of [[20, 230], [60, 274], [140, 228], [200, 276], [310, 274], [380, 228], [430, 276], [500, 230]]) {
+      R(g, x, y, 2, 2, "#f05050"); R(g, x + 3, y + 1, 2, 2, "#f8e040"); R(g, x + 1, y + 3, 2, 2, "#f05050");
     }
-    R(g, DOOR.x - 2, WALL_Y, DOOR.w + 4, WALK_Y - WALL_Y, "#5a3620");
-    R(g, DOOR.x, WALL_Y + 1, DOOR.w, WALK_Y - WALL_Y - 1, "#c58f5c");
-    R(g, DOOR.x, WALL_Y + 1, DOOR.w, 2, "#a8744a");
-    // sidewalk, curb, road
-    R(g, 0, WALK_Y, W, ROAD_Y - WALK_Y, "#b9b8ae");
-    for (let x = 0; x < W; x += 20) R(g, x, WALK_Y, 1, ROAD_Y - WALK_Y, "#a3a298");
-    R(g, 0, WALK_Y + 20, W, 1, "#a3a298");
-    R(g, 0, ROAD_Y - 3, W, 3, "#8d8c84");
-    R(g, 0, ROAD_Y, W, H - ROAD_Y, "#3d4046");
-    for (let x = 6; x < W; x += 28) R(g, x, ROAD_Y + 18, 14, 2, "#e8d36a");
-    // doormat, plants and a street lamp
-    R(g, DOOR.x - 1, WALK_Y + 1, DOOR.w + 2, 5, "#5c3b1e");
-    Sp.plant(g, DOOR.x - 16, WALK_Y - 6);
-    Sp.plant(g, DOOR.x + DOOR.w + 4, WALK_Y - 6);
-    Sp.plant(g, 2, 176);
-    Sp.plant(g, 498, 176);
-    R(g, 480, WALK_Y - 30, 3, 66, "#343a40");
-    R(g, 474, WALK_Y - 34, 15, 5, "#495057");
-    R(g, 476, WALK_Y - 30, 11, 2, "#ffe066");
+    for (let x = 0; x < 230; x += 8) { BOX(g, x, 270, 4, 12, "#fbfbff"); }
+    R(g, 0, 274, 230, 2, "#283040");
+    Sp.sign(g, 290, 224, 50);
+    Sp.tree(g, 470, 262);
   }
 
   /* ---------- drawing pieces ---------- */
 
   function drawPerson(d) {
-    const sprite = Sp.person(d.color, d.hair, d.frame);
+    const sprite = Sp.person(d.color, d.hair, d.dir, d.frame);
     wctx.globalAlpha = d.alpha;
-    wctx.drawImage(sprite, Math.round(d.x - 4), Math.round(d.y - (d.frame === "sit" ? 15 : 14)));
+    wctx.drawImage(sprite, Math.round(d.x - 7), Math.round(d.y - (d.frame === "sit" ? 18 : 20)));
     wctx.globalAlpha = 1;
   }
 
   function drawWallClock(t, phase) {
-    const cx = 302, cy = 9;
-    R(wctx, cx - 8, cy - 8, 17, 17, "#343a40");
-    R(wctx, cx - 7, cy - 7, 15, 15, "#f8f9fa");
+    const cx = 236, cy = 18;
+    R(wctx, cx - 8, cy - 8, 17, 17, "#283040");
+    R(wctx, cx - 7, cy - 7, 15, 15, "#fbfbff");
     for (let k = 0; k < 12; k++) {
       const a = (k / 12) * Math.PI * 2;
-      R(wctx, cx + Math.round(Math.sin(a) * 6), cy - Math.round(Math.cos(a) * 6), 1, 1, "#868e96");
+      R(wctx, cx + Math.round(Math.sin(a) * 6), cy - Math.round(Math.cos(a) * 6), 1, 1, "#8890a0");
     }
     const a = phase * Math.PI * 2;
-    for (let r = 0; r < 6; r++) R(wctx, cx + Math.round(Math.sin(a) * r), cy - Math.round(Math.cos(a) * r), 1, 1, "#e03131");
-    R(wctx, cx, cy, 1, 1, "#212529");
-    label(`T=${t}`, cx, 19, { size: 3.2, color: "#212529" });
+    for (let r = 0; r < 6; r++) R(wctx, cx + Math.round(Math.sin(a) * r), cy - Math.round(Math.cos(a) * r), 1, 1, "#e03838");
+    label(`T=${t}`, cx, cy + 10, { size: 3.4, color: "#283040" });
   }
 
-  /* A small ticket in flight. */
   function drawFlyingTicket(x, y, id) {
     Sp.ticket(wctx, x, y, Sc.colorOf(id), 16, 11);
-    label(id, x + 8, y + 5, { size: 3, color: "#212529" });
+    label(id, x + 8, y + 5, { size: 3.2, color: "#283040" });
   }
 
-  function drawRailTicket(spot, id, F, t, phase) {
+  function drawBoardTicket(spot, id, F, t, phase) {
     const m = P.run.meta[id];
-    const col = Sc.colorOf(id);
     if (spot.kind === "more") {
-      Sp.ticket(wctx, spot.x, spot.y, "#868e96");
-      label(`+${F.queues.ready.length - (SLOTS - 1)}`, spot.x + 15, spot.y + 12, { size: 5, color: "#212529" });
-      label("MORE", spot.x + 15, spot.y + 22, { size: 3, color: "#495057" });
+      Sp.ticket(wctx, spot.x, spot.y, "#8890a0");
+      label(`+${F.queues.ready.length - (SLOTS - 1)}`, spot.x + 13, spot.y + 10, { size: 5, color: "#283040" });
+      label("MORE", spot.x + 13, spot.y + 19, { size: 3, color: "#585f70" });
       return;
     }
-    Sp.ticket(wctx, spot.x, spot.y, col);
-    label(id, spot.x + 15, spot.y + 8, { size: 4.5, color: "#212529" });
+    Sp.ticket(wctx, spot.x, spot.y, Sc.colorOf(id));
+    label(id, spot.x + 13, spot.y + 7, { size: 4.4, color: "#283040" });
     const sched = P.run.started.scheduler;
-    const lines = [
-      ["ARR", m.arrival, sched === "FCFS"],
-      ["PRI", m.priority, sched === "PRIORITY"],
-      ["JOB", m.service, sched === "SJF"],
-    ];
-    lines.forEach(([k, v, key], n) => {
-      if (key) R(wctx, spot.x + 1, spot.y + 14 + n * 6, 28, 6, "#fff3bf");
-      label(`${k} ${v}`, spot.x + 15, spot.y + 15 + n * 6, { size: 3, color: key ? "#c92a2a" : "#495057" });
-    });
+    [["ARR", m.arrival, sched === "FCFS"], ["PRI", m.priority, sched === "PRIORITY"], ["JOB", m.service, sched === "SJF"]]
+      .forEach(([k, v, key], n) => {
+        if (key) R(wctx, spot.x + 1, spot.y + 12 + n * 5, 24, 5, "#fff0a0");
+        label(`${k} ${v}`, spot.x + 13, spot.y + 12.5 + n * 5, { size: 3, color: key ? "#c02828" : "#585f70" });
+      });
     const done = P.progress(id, t, phase);
     if (done > 0) {
-      R(wctx, spot.x + 2, spot.y + 31, 26, 2, "#dee2e6");
-      R(wctx, spot.x + 2, spot.y + 31, Math.round((26 * done) / m.service), 2, "#2f9e44");
+      R(wctx, spot.x + 2, spot.y + 27, 22, 2, "#d8dce8");
+      R(wctx, spot.x + 2, spot.y + 27, Math.round((22 * done) / m.service), 2, "#38a048");
     }
   }
 
   /* A blocked order's tag on the wall above the machine it waits for. */
   function drawHookTag(spot, id, F) {
-    const col = Sc.colorOf(id);
-    if (spot.k > 1) {                       /* third in line or later: one "+N" tag */
+    if (spot.k > 1) {                             /* third in line or later: one "+N" note */
       if (spot.k === 2) {
         const res = F.resources.find(r => r.waiting.includes(id));
-        label(`+${res.waiting.length - 2} MORE`, spot.x + 22, spot.y - 10, { size: 2.6, color: "#c92a2a" });
+        label(`+${res.waiting.length - 2}`, spot.x + 33, spot.y - 8, { size: 3, color: "#c02828" });
       }
       return;
     }
-    R(wctx, spot.x, spot.y, 44, 8, "#fff5f5");
-    R(wctx, spot.x, spot.y, 3, 8, col);
-    R(wctx, spot.x, spot.y + 7, 44, 1, "#c92a2a");
-    label(`WAIT ${id}`, spot.x + 24, spot.y + 2, { size: 3, color: "#c92a2a" });
+    BOX(wctx, spot.x, spot.y, 30, 9, "#fff0f0");
+    R(wctx, spot.x + 1, spot.y + 1, 3, 7, Sc.colorOf(id));
+    label(`WAIT ${id}`, spot.x + 17, spot.y + 2.4, { size: 3.2, color: "#c02828" });
+  }
+
+  /* Tiny chair and table icons with the counts a party needs. */
+  function needSign(x, y, chairs, tables, alpha) {
+    const w = 30;
+    wctx.globalAlpha = alpha;
+    BOX(wctx, x - w / 2, y, w, 9, "#fbfbff");
+    R(wctx, x - w / 2 + 3, y + 2, 3, 3, "#c07838");
+    R(wctx, x - w / 2 + 3, y + 5, 4, 1, "#c07838");
+    R(wctx, x - w / 2 + 3, y + 6, 1, 2, "#283040");
+    R(wctx, x - w / 2 + 6, y + 6, 1, 2, "#283040");
+    R(wctx, x + 1, y + 3, 6, 2, "#c88848");
+    R(wctx, x + 2, y + 5, 1, 3, "#283040");
+    R(wctx, x + 5, y + 5, 1, 3, "#283040");
+    wctx.globalAlpha = 1;
+    label(String(chairs), x - w / 2 + 11, y + 2, { size: 3.4, color: "#283040", alpha });
+    label(String(tables), x + 11, y + 2, { size: 3.4, color: "#283040", alpha });
   }
 
   /* ---------- main render ---------- */
@@ -398,103 +450,86 @@
     wctx.drawImage(bg, 0, 0);
 
     const run = P.run;
-    const t = P.t, phase = P.phase;
+    const t = P.t, phase = run ? P.phase : 0;
     const cur = run ? P.frameAt(t) : null;
     const prev = run ? (t > 0 ? P.frameAt(t - 1) : P.empty) : null;
     const events = run ? P.eventsAt(t) : [];
     const declared = new Set(run ? run.started.resources.map(r => r.id) : Sc.equipment);
 
-    drawWallClock(t, run ? phase : 0);
-    drawKitchen(run, prev, cur, events, declared, t, phase, now);
-    drawDining(run, prev, cur, events, t, phase, now);
-    drawStaticLabels(run, cur, prev, phase);
+    drawWallClock(t, phase);
+    drawKitchen(run, prev, cur, declared, t, phase, now);
+    drawRoom(run, prev, cur, events, t, phase, now);
+    drawStaticLabels(run, cur, phase);
     if (run) drawPopups(prev, cur, events, phase);
     if (run && run.deadlock && t >= P.endTime && phase >= 0.6) drawDeadlock(cur, now);
 
-    // blit the world, then the crisp text on top
     ctx.imageSmoothingEnabled = false;
-    ctx.fillStyle = "#1b1410";
+    ctx.fillStyle = "#181c28";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(world, ox, oy, W * scale, H * scale);
     drawLabels();
-    drawOverlay(now);
+    drawOverlay();
   };
 
-  function drawKitchen(run, prev, cur, events, declared, t, phase, now) {
-    // machines on the back counter
+  function drawKitchen(run, prev, cur, declared, t, phase, now) {
     for (const id of Sc.equipment) {
-      const x = COL_X[id] + 4;
+      const x = MACH_X[id];
       const used = declared.has(id);
       let holder = null, on = false;
       if (run && used) {
-        const before = prev.resources.find(r => r.id === id);
-        const after = cur.resources.find(r => r.id === id);
+        const before = prev.resources.find(r => r.id === id), after = cur.resources.find(r => r.id === id);
         const h0 = before ? before.holder : null, h1 = after ? after.holder : null;
         holder = h0 === h1 ? h1 : phase < 0.15 ? h0 : phase < 0.45 ? null : h1;
-        const atIt = cur.chefAt.includes(id) && (prev.chefAt.includes(id) ? true : phase >= 0.55);
+        const atIt = cur.chefAt.includes(id) && (prev.chefAt.includes(id) || phase >= 0.55);
         on = !!holder && cur.byId[holder] && cur.byId[holder].state === "RUNNING" && atIt;
       }
-      wctx.globalAlpha = used ? 1 : 0.35;
-      Sp.machine(wctx, id, x, MACHINE_Y, on, now);
+      wctx.globalAlpha = used ? 1 : 0.4;
+      Sp.machine(wctx, id, x, MACH_Y, on, now);
       wctx.globalAlpha = 1;
-      R(wctx, x + 35, MACHINE_Y - 4, 4, 4, "#212529");
-      R(wctx, x + 36, MACHINE_Y - 3, 2, 2, !used ? "#868e96" : holder ? "#fa5252" : "#51cf66");
-      label(id.replace("_", " "), x + 20, COUNTER_Y + 6, { size: 3.4, color: used ? "#f8f9fa" : "#adb5bd" });
-      if (!used) label("NOT USED", x + 20, MACHINE_Y + 11, { size: 3, color: "#495057" });
+      BOX(wctx, x + 26, MACH_Y - 3, 5, 5, !used ? "#8890a0" : holder ? "#f04848" : "#50d060");
+      label(id.replace("_", " ").replace("COFFEE MACHINE", "COFFEE"), x + 16, WALL_H + 2, { size: 3.2, color: used ? "#283040" : "#8890a0" });
+      if (!used) label("NOT USED", x + 16, MACH_Y + 12, { size: 3, color: "#283040", bg: "rgba(255,255,255,0.8)", pad: 0.6 });
       if (holder) {
         const col = Sc.colorOf(holder);
-        label(holder, x + 20, MACHINE_Y + 22, { size: 3.6, color: Sp.ink(col), bg: col, pad: 1.2 });
+        label(holder, x + 16, MACH_Y + 22, { size: 3.6, color: Sp.ink(col), bg: col, pad: 1, border: "#283040" });
       }
     }
-    // stoves (each chef's home station)
     for (let c = 0; c < 2; c++) {
-      const cooking = run && cur.chefs[c] && cur.chefAt[c] === "stove" + c &&
-                      (prev.chefAt[c] === "stove" + c && prev.chefs[c] === cur.chefs[c] ? true : phase >= 0.55);
-      Sp.stove(wctx, STOVE_X[c] + 4, MACHINE_Y + 2, !!cooking, now);
-      label(`STOVE ${c}`, STOVE_X[c] + 24, COUNTER_Y + 6, { size: 3.4, color: "#f8f9fa" });
+      const key = "stove" + c;
+      const cooking = run && cur.chefs[c] && cur.chefAt[c] === key &&
+                      (prev.chefAt[c] === key && prev.chefs[c] === cur.chefs[c] ? true : phase >= 0.55);
+      Sp.stove(wctx, MACH_X[key], MACH_Y, !!cooking, now);
+      label(`STOVE ${c}`, MACH_X[key] + 16, WALL_H + 2, { size: 3.2, color: "#283040" });
     }
 
     if (!run) {
-      for (let c = 0; c < 2; c++) drawChef(c, stationSpot("stove" + c), "idle", null, 0);
+      for (let c = 0; c < 2; c++) drawChef(c, stationSpot("stove" + c), "down", "stand", null, 0, now, false);
       return;
     }
 
-    // tickets: rail, hooks, flying
+    // tickets: board, hooks, in flight
     const flyingTo = {};
     for (const id in run.meta) {
       const a = ticketSpot(prev, id), b = ticketSpot(cur, id);
       if (!a && !b) continue;
-      if (a && b && a.kind === "chef" && b.kind === "chef" && a.c === b.c) continue;   /* the chef's bubble */
+      if (a && b && a.kind === "chef" && b.kind === "chef" && a.c === b.c) continue;  /* the chef's bubble */
       const same = a && b && a.kind === b.kind && a.x === b.x && a.y === b.y;
-      if (same) {
-        if (b.kind === "rail" || b.kind === "more") drawRailTicket(b, id, cur, t, phase);
-        else if (b.kind === "hook") drawHookTag(b, id, cur);
-        continue;
-      }
-      if (!b) {                                   /* completed: the ticket becomes the dish */
-        if (a.kind !== "chef" && phase < 0.05) drawFlyingTicket(a.x + 6, a.y + 8, id);
-        continue;
-      }
-      let from = a;
-      let win = [0.15, 0.55];
-      if (!a) {                                   /* just admitted: the order leaves the table */
+      const drawAt = (s, F, ph) => {
+        if (s.kind === "rail" || s.kind === "more") drawBoardTicket(s, id, F, t, ph);
+        else if (s.kind === "hook") drawHookTag(s, id, F);
+      };
+      if (same) { drawAt(b, cur, phase); continue; }
+      if (!b) { if (a.kind !== "chef" && phase < 0.05) drawFlyingTicket(a.x + 5, a.y + 8, id); continue; }
+      let from = a, win = [0.15, 0.55];
+      if (!a) {                                     /* just seated: the order goes to the board */
         const seats = slotsOf(cur.pools.SPACE, id);
-        const s = seatFeet(seats[0] !== undefined ? seats[0] : 0);
-        from = { x: s.x - 8, y: s.y - 20 };
+        const s = seatSpot(seats.length ? seats[0] : 0);
+        from = { x: s.x - 8, y: s.y - 26 };
         win = [0.45, 0.85];
       }
-      if (phase >= win[1]) {
-        if (b.kind === "rail" || b.kind === "more") drawRailTicket(b, id, cur, t, phase);
-        else if (b.kind === "hook") drawHookTag(b, id, cur);
-        continue;
-      }
+      if (phase >= win[1]) { drawAt(b, cur, phase); continue; }
       if (b.kind === "chef") flyingTo[b.c] = win[1];
-      if (phase <= win[0] && a) {
-        if (a.kind === "rail" || a.kind === "more") drawRailTicket(a, id, prev, t, 0);
-        else if (a.kind === "hook") drawHookTag(a, id, prev);
-        continue;
-      }
-      if (phase <= win[0]) continue;
+      if (phase <= win[0]) { if (a) drawAt(a, prev, 0); continue; }
       const p = along({ pts: [{ x: from.x, y: from.y }, { x: b.x, y: b.y }], win }, phase);
       drawFlyingTicket(p.x, p.y, id);
     }
@@ -502,59 +537,65 @@
     // chefs
     for (let c = 0; c < 2; c++) {
       const a = stationSpot(prev.chefAt[c]), b = stationSpot(cur.chefAt[c]);
-      const path = { pts: [a, b], win: [0.15, 0.55] };
-      const pos = a.x === b.x ? { x: b.x, y: b.y, moving: false } : along(path, phase);
-      const order = cur.chefs[c];
-      const prevOrder = prev.chefs[c];
-      let frame = "idle";
-      if (pos.moving) frame = Math.floor(now * 8) % 2 ? "walkA" : "walkB";
-      else if (order && !(flyingTo[c] && phase < flyingTo[c])) frame = Math.floor(now * 4) % 2 ? "cookA" : "cookB";
+      const pos = a.x === b.x ? { x: b.x, y: b.y, moving: false } : along({ pts: [a, b], win: [0.15, 0.55] }, phase);
+      const order = cur.chefs[c], prevOrder = prev.chefs[c];
+      const waiting = flyingTo[c] && phase < flyingTo[c];
+      let dir = "down", frame = "stand", working = false;
+      if (pos.moving) { dir = pos.dir; frame = Math.floor(now * 8) % 2 ? "walkA" : "walkB"; }
+      else if (order && !waiting) { dir = "up"; working = true; }
       let bubble = null;
-      if (order && !(flyingTo[c] && phase < flyingTo[c])) bubble = order;
-      else if (!order && prevOrder && phase < 0.1) bubble = prevOrder;
-      else if (order && prevOrder && prevOrder !== order && phase < 0.1) bubble = prevOrder;
-      drawChef(c, pos, frame, bubble, bubble ? P.progress(bubble, t, bubble === order ? phase : 0) : 0);
+      if (order && !waiting) bubble = order;
+      else if (prevOrder && prevOrder !== order && phase < 0.1) bubble = prevOrder;
+      drawChef(c, pos, dir, frame, bubble, bubble ? P.progress(bubble, t, bubble === order ? phase : 0) : 0, now, working);
     }
   }
 
-  function drawChef(c, pos, frame, order, done) {
-    const sprite = Sp.chef(c, frame);
-    wctx.drawImage(sprite, Math.round(pos.x - 5), Math.round(pos.y - 18));
-    label(`CHEF ${c}`, pos.x, pos.y + 2, { size: 3, color: "#212529" });
+  function drawChef(c, pos, dir, frame, order, done, now, working) {
+    const bob = working && Math.floor(now * 4) % 2 ? 1 : 0;
+    wctx.drawImage(Sp.chef(c, dir, frame), Math.round(pos.x - 8), Math.round(pos.y - 24 - bob));
+    label(`CHEF ${c}`, pos.x, pos.y + 2, { size: 3, color: "#283040" });
     if (!order) return;
     const m = P.run.meta[order];
     const col = Sc.colorOf(order);
-    const bx = Math.round(pos.x - 14), by = Math.round(pos.y - 31);
-    R(wctx, bx, by, 28, 11, "#212529");
-    R(wctx, bx + 1, by + 1, 26, 9, "#fffdf3");
+    const bx = Math.round(pos.x - 14), by = Math.round(pos.y - 37);
+    BOX(wctx, bx, by, 28, 11, "#fbfbff");
     R(wctx, bx + 1, by + 1, 3, 9, col);
-    R(wctx, bx + 12, by + 11, 4, 2, "#212529");
-    label(order, bx + 15, by + 2, { size: 3.4, color: "#212529" });
-    R(wctx, bx + 5, by + 7, 21, 2, "#dee2e6");
-    R(wctx, bx + 5, by + 7, Math.round((21 * done) / m.service), 2, "#2f9e44");
-    label(`${Math.floor(done + 1e-6)}/${m.service}`, bx + 34, by + 3, { size: 3, color: "#212529", align: "left" });
+    R(wctx, bx + 12, by + 10, 4, 2, "#fbfbff");
+    R(wctx, bx + 12, by + 12, 4, 1, "#283040");
+    label(order, bx + 15, by + 1.6, { size: 3.4, color: "#283040" });
+    R(wctx, bx + 5, by + 7, 21, 2, "#d8dce8");
+    R(wctx, bx + 5, by + 7, Math.round((21 * done) / m.service), 2, "#38a048");
+    label(`${Math.floor(done + 1e-6)}/${m.service}`, bx + 30, by + 3, { size: 3, color: "#283040", align: "left", bg: "rgba(255,255,255,0.75)", pad: 0.5 });
   }
 
-  function drawDining(run, prev, cur, events, t, phase, now) {
-    const space = run ? shownPool(prev.pools.SPACE, cur.pools.SPACE, phase) : new Array(Sc.pools.SPACE).fill(null);
-    const table = run ? shownPool(prev.pools.TABLE, cur.pools.TABLE, phase) : new Array(Sc.pools.TABLE).fill(null);
+  function drawRoom(run, prev, cur, events, t, phase, now) {
+    const space = run ? shownPool(prev.pools.SPACE, cur.pools.SPACE, phase, 0.15, 0.4) : new Array(Sc.pools.SPACE).fill(null);
+    const table = run ? shownPool(prev.pools.TABLE, cur.pools.TABLE, phase, 0.38, 0.45) : new Array(Sc.pools.TABLE).fill(null);
 
-    // owner highlight under the chairs (contiguous run = one order)
+    // tables with their name plates, cloths and flags
+    for (let j = 0; j < table.length; j++) {
+      const x = tableX(j), o = table[j];
+      Sp.table(wctx, x, TABLE_Y, o ? Sc.colorOf(o) : null);
+      BOX(wctx, x + 17, TABLE_Y + 13, 14, 7, "#fbfbff");
+      label(tableName(j), x + 24, TABLE_Y + 14.2, { size: 3.6, color: "#283040" });
+      if (o) {
+        Sp.flag(wctx, x + 38, TABLE_Y - 9, Sc.colorOf(o));
+        label(o, x + 16, TABLE_Y + 4, { size: 4, color: Sp.ink(Sc.colorOf(o)) });
+      }
+    }
+    // chairs in the corner, tinted under their owner
     space.forEach((o, i) => {
       if (!o) return;
       const col = Sc.colorOf(o);
-      R(wctx, chairX(i) - 4, CHAIR_Y - 3, seatDX, 32, Sp.shade(col, -0.15));
-      R(wctx, chairX(i) - 3, CHAIR_Y - 2, seatDX - 2, 30, col);
+      R(wctx, chairX(i) - 2, CHAIR_Y - 9, chairDX, 32, Sp.shade(col, -0.2));
+      R(wctx, chairX(i) - 1, CHAIR_Y - 8, chairDX - 2, 30, col);
     });
     for (let i = 0; i < space.length; i++) Sp.chair(wctx, chairX(i), CHAIR_Y);
-    for (let j = 0; j < table.length; j++) Sp.table(wctx, tableX(j), TABLE_Y, tableW, table[j] ? Sc.colorOf(table[j]) : null);
-
-    // allocation hint: free holes and the one the allocator picked
-    if (run) drawAllocation(prev, cur, events, phase);
 
     if (!run) return;
+    drawAllocation(cur, events, phase);
 
-    // customers (sorted by y so nearer ones are drawn on top)
+    // customers, nearer ones drawn on top
     const people = [];
     for (const id in run.meta) {
       const m = run.meta[id];
@@ -563,79 +604,71 @@
         const a = memberSpot(prev, id, j), b = memberSpot(cur, id, j);
         if (!a && !b) continue;
         let pos, path = null;
-        if (a && b && a.x === b.x && a.y === b.y) pos = { x: b.x, y: b.y, moving: false, done: true };
+        if (a && b && a.x === b.x && a.y === b.y) pos = { x: b.x, y: b.y, moving: false, done: true, started: true, dir: "right", u: 1 };
         else {
-          path = memberPath(a, b, j);
-          pos = along(path, phase);
+          path = memberPath(a, b, j, id, prev);
+          pos = follow(path, phase);
         }
-        if (!b && pos.done) continue;                          /* left the screen */
+        if (!b && pos.done) continue;                          /* walked off the screen */
         let alpha = 1;
         if (path && path.fadeIn) alpha = clamp01((phase - path.win[0]) / 0.06);
         if (alpha <= 0) continue;
-        const walking = pos.moving ? (Math.floor(now * 8 + j) % 2 ? "walkA" : "walkB") : "idle";
-        people.push({ id, j, x: pos.x, y: pos.y, color: col, hair: m.index * 3 + j, frame: seatedFrame(a, b, pos, walking),
-                      alpha, leader: j === 0, moving: pos.moving, carryBag: !b && !m.table_req && pos.u > 0 });
+        let dir = pos.moving ? pos.dir : "right", frame = pos.moving ? (Math.floor(now * 8 + j) % 2 ? "walkA" : "walkB") : "stand";
+        const sitting = (b && b.zone === "seat" && pos.done) || (a && a.zone === "seat" && !b && !pos.started);
+        if (sitting) { dir = "down"; frame = "sit"; }
+        else if (!pos.moving && pos.pause === 0 && path && path.facePause) dir = path.facePause;
+        people.push({ id, j, x: pos.x, y: pos.y, color: col, hair: m.index * 3 + j, dir, frame, alpha,
+                      moving: pos.moving, leaving: !b, carryBag: !b && !m.table_req && pos.pause === null && pos.started });
       }
     }
     people.sort((p, q) => p.y - q.y);
     for (const d of people) {
       drawPerson(d);
-      if (d.carryBag) Sp.bag(wctx, d.x + 3, d.y - 8);
+      if (d.carryBag) Sp.bag(wctx, d.x + 4, d.y - 10);
     }
-    // ID signs over walking or waiting parties
-    for (const d of people) {
-      if (!d.leader || d.frame === "sit") continue;
-      const m = run.meta[d.id];
-      const col = Sc.colorOf(d.id);
-      const L = cur.byId[d.id].state === "BLOCKED_MEMORY" ? queueLayout(cur)[d.id] : null;
-      const sx = L && !d.moving ? L.center : d.x + ((m.space_req - 1) * 9) / 2;
-      const lift = L && L.pos % 2 ? 11 : 0;                 /* alternate heights in a long line */
-      label(d.id, sx, d.y - 25 - lift, { size: 3.6, color: Sp.ink(col), bg: col, pad: 1.2, alpha: d.alpha });
-      label(`${m.space_req}S ${m.table_req}T`, sx, d.y - 19 - lift, { size: 2.8, color: "#fff", bg: "rgba(0,0,0,0.55)", pad: 0.8, alpha: d.alpha });
+    // ID sign over each party that is standing or walking
+    const leaders = {};
+    for (const d of people) if (d.frame !== "sit" && (!leaders[d.id] || d.j === 0)) leaders[d.id] = d;
+    for (const id in leaders) {
+      const d = leaders[id], m = run.meta[id], col = Sc.colorOf(id);
+      const L = cur.byId[id].state === "BLOCKED_MEMORY" ? queueLayout(cur)[id] : null;
+      const sx = L && !d.moving ? L.center : d.x;
+      const lift = L && L.pos % 2 ? 12 : 0;                   /* alternate heights in a long line */
+      label(id, sx, d.y - 28 - lift, { size: 3.6, color: Sp.ink(col), bg: col, pad: 0.8, alpha: d.alpha, border: "#283040" });
+      if (!d.leaving) needSign(sx, d.y - 41 - lift, m.space_req, m.table_req, d.alpha);
     }
-
-    // seated order IDs on the rug, under each run of seats
+    // seated orders: ID and state under their chairs
     const runs = {};
     space.forEach((o, i) => o && (runs[o] = runs[o] || []).push(i));
+    let nth = 0;
     for (const o in runs) {
       const s = runs[o];
-      const x = (chairX(s[0]) + chairX(s[s.length - 1]) + 20) / 2;
+      const x = (chairX(s[0]) + chairX(s[s.length - 1]) + 16) / 2;
       const col = Sc.colorOf(o);
       const st = cur.byId[o].state;
       const tag = st === "RUNNING" ? "COOKING" : st === "BLOCKED_RESOURCE" ? "BLOCKED" : st === "READY" ? "READY" : "";
-      label(o, x, CHAIR_Y + 21, { size: 3.2, color: Sp.ink(col), bg: col, pad: 0.8 });
-      if (tag) label(tag, x, CHAIR_Y + 26, { size: 2.4, color: "#fff", bg: "rgba(0,0,0,0.6)", pad: 0.6 });
+      label(o, x, CHAIR_Y + 19, { size: 3.4, color: Sp.ink(col), bg: col, pad: 0.8, border: "#283040" });
+      if (tag) label(tag, x, CHAIR_Y + 25 + (nth++ % 2) * 6, { size: 2.6, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.6 });
     }
-    table.forEach((o, j) => o && label(o, tableX(j) + tableW / 2, TABLE_Y + 4, { size: 3.6, color: Sp.ink(Sc.colorOf(o)) }));
 
     // dishes for orders served now
     for (const ev of events) {
-      if (ev.type !== "COMPLETE") continue;
+      if (ev.type !== "COMPLETE" || phase > 0.5) continue;
       const id = ev.process_id;
       const c = prev.chefs.indexOf(id);
-      const start = c >= 0 ? stationSpot(prev.chefAt[c]) : { x: RAIL.x + 20, y: RAIL.y + 40 };
+      const start = c >= 0 ? stationSpot(prev.chefAt[c]) : { x: BOARD.x + 20, y: 60 };
       const tables = slotsOf(prev.pools.TABLE, id);
-      const seats = slotsOf(prev.pools.SPACE, id);
-      let target;
-      if (tables.length) target = { x: (tableX(tables[0]) + tableX(tables[tables.length - 1]) + tableW) / 2 - 6, y: TABLE_Y + 5 };
-      else target = { x: seatFeet(seats[0] || 0).x - 2, y: CHAIR_Y - 6 };
-      if (phase > 0.4) continue;                 /* gone before the next owner sits down */
-      const p = along({ pts: [{ x: start.x - 6, y: start.y - 26 }, target], win: [0, 0.15] }, phase);
-      wctx.globalAlpha = phase > 0.32 ? clamp01((0.4 - phase) / 0.08) : 1;
+      const target = tables.length ? { x: tableX(tables[0]) + 18, y: TABLE_Y + 4 } : { x: COUNTER_X + 3, y: COUNTER_Y - 6 };
+      const p = along({ pts: [{ x: start.x - 6, y: start.y - 30 }, target], win: [0, 0.15] }, phase);
+      wctx.globalAlpha = phase > 0.42 ? clamp01((0.5 - phase) / 0.08) : 1;
       if (tables.length) Sp.dish(wctx, Math.round(p.x), Math.round(p.y));
-      else if (!p.done) Sp.bag(wctx, Math.round(p.x), Math.round(p.y));
+      else if (phase < 0.3) Sp.bag(wctx, Math.round(p.x), Math.round(p.y));
       wctx.globalAlpha = 1;
     }
   }
 
-  function seatedFrame(a, b, pos, frame) {
-    if (b && b.zone === "seat" && pos.done) return "sit";
-    if (a && a.zone === "seat" && !b && phase0(pos)) return "sit";
-    return frame;
-  }
-  const phase0 = pos => !pos.moving && !pos.done && pos.u === 0;
-
-  function drawAllocation(prev, cur, events, phase) {
+  /* Free gaps (dashed) and the gap the allocator picked (solid), per admission. */
+  function drawAllocation(cur, events, phase) {
     const admits = events.filter(e => e.type === "MEMORY_ADMIT");
     if (!admits.length) return;
     const span = 0.55 / admits.length;
@@ -643,58 +676,50 @@
       const w0 = 0.3 + k * span, w1 = w0 + span;
       if (phase < w0 || phase >= w1) return;
       const later = new Set(admits.slice(k).map(e => e.process_id));
-      for (const [name, x0, dx, w, y, h] of [["SPACE", chairX(0) - 3, seatDX, seatDX - 2, CHAIR_Y - 4, 33],
-                                             ["TABLE", tableX(0) - 3, tableDX, tableW + 6, TABLE_Y - 4, 33]]) {
+      for (const [name, x0, dx, w, y, h] of [["SPACE", chairX(0) - 2, chairDX, 20, CHAIR_Y - 10, 32],
+                                             ["TABLE", tableX(0) - 4, tableDX, TABLE_W + 8, TABLE_Y - 12, 44]]) {
         const before = cur.pools[name].map(o => (later.has(o) ? null : o));
         const mine = slotsOf(cur.pools[name], ev.process_id);
         if (!mine.length) continue;
         for (const hole of holes(before)) {
           const hx = x0 + hole.start * dx, hw = (hole.size - 1) * dx + w;
-          overlay.push({ type: "box", x: hx, y, w: hw, h, color: "#ffe066", dash: true });
-          overlay.push({ type: "text", text: `GAP ${hole.size}`, x: hx + hw / 2, y: y + 1, color: "#ffe066", size: 3, bg: "rgba(0,0,0,0.6)" });
+          overlay.push({ type: "box", x: hx, y, w: hw, h, color: "#f0c020", dash: true });
+          overlay.push({ type: "text", text: `GAP ${hole.size}`, x: hx + hw / 2, y: y + 1, color: "#283040", size: 3, bg: "#fff0a0", border: "#283040" });
         }
         const cx = x0 + mine[0] * dx, cw = (mine.length - 1) * dx + w;
-        overlay.push({ type: "box", x: cx - 1, y: y - 1, w: cw + 2, h: h + 2, color: "#69db7c", dash: false });
-        overlay.push({ type: "text", text: `${P.run.started.allocator.replace("_", " ")} → ${ev.process_id}`, x: cx + cw / 2, y: y + h + 2, color: "#69db7c", size: 3.2 });
+        overlay.push({ type: "box", x: cx - 1, y: y - 1, w: cw + 2, h: h + 2, color: "#30c050" });
+        overlay.push({ type: "text", text: `${P.run.started.allocator.replace("_", " ")} → ${ev.process_id}`, x: cx + cw / 2, y: y + h + 2, color: "#ffffff", size: 3.2, bg: "#30a048", border: "#283040" });
       }
     });
   }
 
-  function drawStaticLabels(run, cur, prev, phase) {
-    const sched = run ? run.started.scheduler : "SCHEDULER";
-    label("READY QUEUE", RAIL.x + RAIL.w / 2, RAIL.y + 3, { size: 4.2, color: "#fff8e1", bg: "#6b4a2f", pad: 1 });
+  function drawStaticLabels(run, cur, phase) {
+    const sched = run ? run.started.scheduler : null;
+    label("ORDER BOARD = READY QUEUE", BOARD.x + BOARD.w / 2, BOARD.y + 2, { size: 3.6, color: "#fff", bg: "#8a5428", pad: 0.8 });
     label(run ? `${sched}: ${RV.Narrate.schedulerRule[sched].split(" (")[0].toUpperCase()}` : "ORDERS WAIT HERE FOR A CHEF",
-          RAIL.x + RAIL.w / 2, RAIL.y + 10, { size: 2.8, color: "#3b2414" });
-    if (run && cur.queues.ready.length) label("▲ NEXT", RAIL.x + 21, RAIL.y + 55, { size: 2.8, color: "#c92a2a" });
-    if (run && !cur.queues.ready.length) label("EMPTY", RAIL.x + RAIL.w / 2, RAIL.y + 34, { size: 3.4, color: "#8a6440" });
+          BOARD.x + BOARD.w / 2, BOARD.y + 8.5, { size: 2.8, color: "#4a2810" });
+    if (run && cur.queues.ready.length) label("▲ NEXT", BOARD.x + 21, BOARD.y + 47, { size: 2.8, color: "#c02828" });
+    if (run && !cur.queues.ready.length) label("EMPTY", BOARD.x + BOARD.w / 2, BOARD.y + 28, { size: 3.6, color: "#a07040" });
 
-    label("KITCHEN: 2 CHEFS = 2 CPUS  ·  MACHINES = SHARED RESOURCES (ONE USER AT A TIME)", 8, DIVIDER_Y + 4, { size: 3, color: "#fff3d6", align: "left" });
-    label(`SEATS = SPACE POOL (${Sc.pools.SPACE} SLOTS)`, chairX(0) + (seatDX * Sc.pools.SPACE) / 2 - 4, 121, { size: 3.2, color: "#fff", bg: "rgba(0,0,0,0.45)", pad: 1 });
-    label(`TABLES = TABLE POOL (${Sc.pools.TABLE} SLOTS)`, tableX(0) + (tableDX * Sc.pools.TABLE) / 2 - 8, 121, { size: 3.2, color: "#fff", bg: "rgba(0,0,0,0.45)", pad: 1 });
-    for (let i = 0; i < Sc.pools.SPACE; i++) label(String(i), chairX(i) + 10, CHAIR_Y + 32, { size: 3, color: "#ffe8cc" });
-    for (let j = 0; j < Sc.pools.TABLE; j++) label(`T${j}`, tableX(j) + tableW / 2, TABLE_Y + 30, { size: 3, color: "#d0ebff" });
+    label("KITCHEN · 2 CHEFS = 2 CPUS · MACHINES = SHARED RESOURCES", 6, COUNTER_Y + 10, { size: 2.8, color: "#fff8e8", align: "left" });
+    const chairsMid = chairX(0) + (chairDX * Sc.pools.SPACE) / 2 - 2;
+    const tablesMid = tableX(0) + (tableDX * (Sc.pools.TABLE - 1) + TABLE_W) / 2;
     const sp = run ? cur.pools.SPACE : new Array(Sc.pools.SPACE).fill(null);
     const tb = run ? cur.pools.TABLE : new Array(Sc.pools.TABLE).fill(null);
-    const info = pool => {
-      const free = pool.filter(o => o === null).length;
-      const big = holes(pool).reduce((a, h) => Math.max(a, h.size), 0);
-      return `${free} FREE · BIGGEST GAP ${big}`;
-    };
-    if (!run || phase >= 0.4) {
-      label(info(sp), chairX(0) + (seatDX * Sc.pools.SPACE) / 2 - 4, 184, { size: 3, color: "#fff3d6" });
-      label(info(tb), tableX(0) + (tableDX * Sc.pools.TABLE) / 2 - 8, 184, { size: 3, color: "#fff3d6" });
-    }
-    label("STREET = MEMORY QUEUE (FIFO): WAITING FOR ADJACENT SEATS + TABLES", 8, ROAD_Y + 6, { size: 3, color: "#e9ecef", align: "left" });
-    label("ENTRANCE", DOOR.x + DOOR.w / 2, WALL_Y - 5, { size: 2.6, color: "#fff3d6", bg: "rgba(0,0,0,0.5)", pad: 0.8 });
-    if (run && cur.queues.memory.length) label("◀ HEAD", QUEUE_RIGHT - 2, QUEUE_Y + 4, { size: 2.6, color: "#fff", align: "left" });
+    const info = pool => (run && phase < 0.4 ? "" : ` · ${pool.filter(o => o === null).length} FREE, GAP ${holes(pool).reduce((a, h) => Math.max(a, h.size), 0)}`);
+    label(`CHAIRS = SPACE POOL${info(sp)}`, chairsMid, CHAIR_Y - 19, { size: 2.8, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.8 });
+    label(`TABLES = TABLE POOL${info(tb)}`, tablesMid, TABLE_Y - 21, { size: 2.8, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.8 });
+    label("RESTAURANT", 315, 227.5, { size: 2.7, color: "#4a2810" });
+    label("OUTSIDE = MEMORY QUEUE (FIFO)", 330, H - 9, { size: 2.8, color: "#1c4010", align: "left" });
+    if (run && cur.queues.memory.length) label("◀ HEAD", QUEUE_RIGHT + 2, PATH_Y + 3, { size: 2.6, color: "#4a2810", align: "left" });
   }
 
   const POPUP = {
-    MEMORY_BLOCK: ["NO ROOM", "#ff6b6b", 0.3], MEMORY_ADMIT: ["SEATED", "#69db7c", 0.4],
-    DISPATCH: ["START", "#69db7c", 0.5], RESOURCE_ACQUIRE: ["TAKES", "#69db7c", 0.45],
-    RESOURCE_WAIT: ["WAIT", "#ffa94d", 0.3], RESOURCE_BLOCK: ["BLOCKED", "#ff6b6b", 0.35],
-    RESOURCE_RELEASE: ["FREE", "#74c0fc", 0.15], RESOURCE_ROLLBACK: ["ROLLBACK", "#da77f2", 0.15],
-    RESOURCE_UNBLOCK: ["READY", "#69db7c", 0.5], COMPLETE: ["SERVED!", "#ffd43b", 0.1],
+    MEMORY_BLOCK: ["NO ROOM!", "#c02828", 0.3], MEMORY_ADMIT: ["SEATED", "#208838", 0.4],
+    DISPATCH: ["START", "#208838", 0.5], RESOURCE_ACQUIRE: ["TAKES", "#208838", 0.45],
+    RESOURCE_WAIT: ["WAIT", "#d06010", 0.3], RESOURCE_BLOCK: ["BLOCKED", "#c02828", 0.35],
+    RESOURCE_RELEASE: ["FREE", "#2860c0", 0.15], RESOURCE_ROLLBACK: ["ROLLBACK", "#8838b8", 0.15],
+    RESOURCE_UNBLOCK: ["READY", "#208838", 0.5], COMPLETE: ["SERVED!", "#c08000", 0.1],
   };
 
   function drawPopups(prev, cur, events, phase) {
@@ -703,29 +728,31 @@
       const def = POPUP[ev.type];
       if (!def) return;
       let [text, color, start] = def;
-      let x, y;
       const id = ev.process_id;
-      if (ev.type === "MEMORY_BLOCK") { x = DOOR.x + DOOR.w + 44; y = WALL_Y + 5; text = `${id} NO ROOM`; }
-      else if (ev.type === "MEMORY_ADMIT" || ev.type === "COMPLETE") {
-        const pool = ev.type === "COMPLETE" ? prev.pools.SPACE : cur.pools.SPACE;
-        const s = slotsOf(pool, id);
-        x = s.length ? (chairX(s[0]) + chairX(s[s.length - 1]) + 20) / 2 : 120;
-        y = CHAIR_Y + 4;
-        text = `${id} ${text}`;
+      let x, y;
+      if (ev.type === "MEMORY_BLOCK") {
+        const L = queueLayout(cur)[id];
+        x = L ? L.center : DOOR_OUT.x; y = PATH_Y + 5; text = `${id} ${text}`;
+      } else if (ev.type === "MEMORY_ADMIT") {
+        const s = slotsOf(cur.pools.SPACE, id);
+        x = s.length ? (chairX(s[0]) + chairX(s[s.length - 1]) + 16) / 2 : 80; y = CHAIR_Y - 2; text = `${id} ${text}`;
+      } else if (ev.type === "COMPLETE") {
+        const tb = slotsOf(prev.pools.TABLE, id);
+        x = tb.length ? tableX(tb[0]) + TABLE_W / 2 : PICKUP.x; y = TABLE_Y - 12; text = `${id} ${text}`;
       } else if (ev.type === "DISPATCH" || ev.type === "RESOURCE_BLOCK") {
         const F = ev.type === "DISPATCH" ? cur : prev;
         const spot = stationSpot(F.chefAt[ev.chef_id] || "stove" + ev.chef_id);
-        x = spot.x; y = CHEF_Y + 7;
+        x = spot.x; y = CHEF_Y + 6;
         text = ev.type === "DISPATCH" ? `START ${id}` : `${id} BLOCKED`;
-      } else if (ev.resource && ev.resource in COL_X) {
-        x = COL_X[ev.resource] + 24; y = MACHINE_Y + 2;
+      } else if (ev.resource && ev.resource in MACH_X) {
+        x = MACH_X[ev.resource] + 16; y = MACH_Y + 4;
         text = ev.type === "RESOURCE_ACQUIRE" ? `+${id}` : ev.type === "RESOURCE_RELEASE" ? `-${id} FREE` : `${id} ${text}`;
       } else return;
       const u = (phase - start) / 0.45;
       if (u < 0 || u > 1) return;
       const key = `${Math.round(x)},${Math.round(y)}`;           /* visible popups at one spot stack up */
       const n = (stack[key] = (stack[key] || 0) + 1) - 1;
-      overlay.push({ type: "text", text, x, y: y - n * 7 - u * 3, color, size: 3.4, alpha: u > 0.7 ? (1 - u) / 0.3 : 1, bg: "rgba(0,0,0,0.75)" });
+      overlay.push({ type: "text", text, x, y: y - n * 7 - u * 3, color, size: 3.4, alpha: u > 0.7 ? (1 - u) / 0.3 : 1, bg: "#fbfbff", border: "#283040" });
     });
   }
 
@@ -735,21 +762,20 @@
     const pulse = 0.55 + 0.45 * Math.sin(now * 6);
     const holderAt = {}, waitAt = {};
     for (const r of F.resources) {
-      if (!(r.id in COL_X)) continue;
+      if (!(r.id in MACH_X)) continue;
       if (r.holder) holderAt[r.holder] = (holderAt[r.holder] || []).concat(r.id);
       r.waiting.forEach((o, k) => (waitAt[o] = { r: r.id, k }));
-      if (r.holder && r.waiting.length) overlay.push({ type: "box", x: COL_X[r.id] + 2, y: MACHINE_Y - 2, w: 44, h: 32, color: "#ff2b2b", alpha: pulse, width: 2 });
+      if (r.holder && r.waiting.length) overlay.push({ type: "box", x: MACH_X[r.id] - 1, y: MACH_Y - 1, w: 34, h: 34, color: "#f02828", alpha: pulse, width: 2 });
     }
     for (const o in waitAt) {
       const w = waitAt[o];
       const res = F.resources.find(r => r.id === w.r);
-      const tagX = COL_X[w.r] + 2 + (w.k % 2) * 23 + 11, tagY = 9;
-      const h = res.holder;
-      if (h) overlay.push({ type: "arrow", x1: tagX, y1: tagY, x2: COL_X[w.r] + 24, y2: MACHINE_Y + 20, color: "#ff2b2b", alpha: pulse });
+      const tagX = MACH_X[w.r] + 16, tagY = 6 + Math.min(w.k, 1) * 10;
+      if (res.holder) overlay.push({ type: "arrow", x1: tagX, y1: tagY + 4, x2: tagX, y2: MACH_Y + 20, color: "#f02828", alpha: pulse });
       for (const held of holderAt[o] || [])
-        overlay.push({ type: "arrow", x1: COL_X[held] + 24, y1: MACHINE_Y + 26, x2: tagX, y2: tagY + 8, color: "#ff8787", alpha: pulse, dash: true, curve: true });
+        overlay.push({ type: "arrow", x1: MACH_X[held] + 16, y1: MACH_Y + 28, x2: tagX, y2: tagY + 5, color: "#ff7878", alpha: pulse, dash: true, curve: true });
     }
-    overlay.push({ type: "text", text: "DEADLOCK: CIRCULAR WAIT", x: 108, y: FLOOR_Y + 4, color: "#fff", bg: "#c92a2a", size: 4.4, alpha: 1 });
+    overlay.push({ type: "text", text: "DEADLOCK: CIRCULAR WAIT", x: 76, y: WALL_H + 9, color: "#fff", bg: "#c02828", size: 4.4, border: "#283040" });
   }
 
   /* ---------- screen-space text and overlay ---------- */
@@ -760,7 +786,7 @@
   }
 
   function drawText(l) {
-    const px = Math.max(7, Math.round(l.size * scale));
+    const px = Math.max(12, Math.round(l.size * scale * 1.9));
     ctx.font = `${px}px ${FONT}`;
     const x = ox + l.x * scale, y = oy + l.y * scale;
     const w = ctx.measureText(l.text).width;
@@ -768,11 +794,16 @@
     ctx.globalAlpha = l.alpha === undefined ? 1 : l.alpha;
     if (l.bg) {
       const pad = (l.pad || 1) * scale;
+      const bx = Math.round(left - pad - 1), by = Math.round(y - pad), bw = Math.round(w + pad * 2 + 2), bh = Math.round(px + pad * 2);
+      if (l.border) {
+        ctx.fillStyle = l.border;
+        ctx.fillRect(bx - 2, by - 2, bw + 4, bh + 4);
+      }
       ctx.fillStyle = l.bg;
-      ctx.fillRect(Math.round(left - pad), Math.round(y - pad), Math.round(w + pad * 2), Math.round(px + pad * 2));
+      ctx.fillRect(bx, by, bw, bh);
     }
     ctx.fillStyle = l.color;
-    ctx.fillText(l.text, Math.round(left), Math.round(y));
+    ctx.fillText(l.text, Math.round(left), Math.round(y - px * 0.08));
     ctx.globalAlpha = 1;
   }
 
@@ -783,7 +814,7 @@
       ctx.globalAlpha = o.alpha === undefined ? 1 : o.alpha;
       ctx.strokeStyle = o.color;
       ctx.lineWidth = Math.max(2, (o.width || 1.6) * scale * 0.7);
-      ctx.setLineDash(o.dash ? [4 * scale * 0.5, 3 * scale * 0.5] : []);
+      ctx.setLineDash(o.dash ? [2 * scale, 1.5 * scale] : []);
       if (o.type === "box") {
         ctx.strokeRect(ox + o.x * scale, oy + o.y * scale, o.w * scale, o.h * scale);
       } else if (o.type === "arrow") {
@@ -792,7 +823,7 @@
         ctx.moveTo(x1, y1);
         let ax = x1, ay = y1;
         if (o.curve) {
-          const mx = (x1 + x2) / 2, my = Math.max(y1, y2) + 18 * scale;
+          const mx = (x1 + x2) / 2, my = Math.max(y1, y2) + 20 * scale;
           ctx.quadraticCurveTo(mx, my, x2, y2);
           ax = mx; ay = my;
         } else ctx.lineTo(x2, y2);

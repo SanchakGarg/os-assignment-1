@@ -3,13 +3,13 @@
   RV.SCENARIOS = [
     {
       key: "integrated", title: "Everything together", source: "tests/a3/integrated.txt",
-      about: "6 orders. O3 waits outside because O1 and O2 hold 5 of the 6 seats. O1 blocks on OVEN_1, which O2 is using. All four machines get used.",
+      about: "6 orders. O3 waits outside because O1 and O2 hold 5 of the 6 chairs. O1 blocks on OVEN_1, which O2 is using. All four machines get used.",
       suggest: { scheduler: "FCFS", allocator: "FIRST_FIT", unsafe: false },
       text: "6\n2\nO1,0,2,5,NORMAL,3,1\nO2,0,1,4,VIP,2,1\nO3,1,2,3,NORMAL,2,1\nO4,2,1,2,VIP,1,0\nO5,3,3,4,NORMAL,1,1\nO6,4,2,3,NORMAL,2,0\n4\nCOFFEE_MACHINE,1\nMICROWAVE,1\nOVEN_1,1\nOVEN_2,1\n14\nO1,1,ACQUIRE,OVEN_1,1\nO1,4,RELEASE,OVEN_1,1\nO2,0,ACQUIRE,OVEN_1,1\nO2,2,RELEASE,OVEN_1,1\nO3,0,ACQUIRE,MICROWAVE,1\nO3,1,ACQUIRE,OVEN_2,1\nO3,3,RELEASE,OVEN_2,1\nO3,3,RELEASE,MICROWAVE,1\nO4,0,ACQUIRE,COFFEE_MACHINE,1\nO4,2,RELEASE,COFFEE_MACHINE,1\nO5,1,ACQUIRE,COFFEE_MACHINE,1\nO5,2,RELEASE,COFFEE_MACHINE,1\nO6,0,ACQUIRE,OVEN_2,1\nO6,3,RELEASE,OVEN_2,1\n"
     },
     {
       key: "contention", title: "Two orders, one oven", source: "tests/a3/contention_same_oven.txt",
-      about: "O1 and O2 both need OVEN_1 at the same moment. One gets it. The other blocks and hands its chef back, but keeps its seat and table.",
+      about: "O1 and O2 both need OVEN_1 at the same moment. One gets it. The other blocks and hands its chef back, but keeps its chair and table.",
       suggest: { scheduler: "FCFS", allocator: "FIRST_FIT", unsafe: false },
       text: "2\n2\nO1,0,1,4,NORMAL,1,1\nO2,0,2,4,NORMAL,1,1\n1\nOVEN_1,1\n4\nO1,1,ACQUIRE,OVEN_1,1\nO1,3,RELEASE,OVEN_1,1\nO2,1,ACQUIRE,OVEN_1,1\nO2,3,RELEASE,OVEN_1,1\n"
     },
@@ -39,13 +39,13 @@
     },
     {
       key: "allocators", title: "First Fit vs Best Fit", source: "tests/a3/allocator_difference.txt",
-      about: "Run it with FIRST_FIT, then BEST_FIT. B2 waits 7 cycles outside with First Fit and none with Best Fit, which uses the exact 1-seat gap for B1.",
+      about: "Run it with FIRST_FIT, then BEST_FIT. B2 waits 7 cycles outside with First Fit and none with Best Fit, which uses the exact 1-chair gap for B1.",
       suggest: { scheduler: "FCFS", allocator: "BEST_FIT", unsafe: false },
       text: "6\n2\nA1,0,1,1,NORMAL,2,0\nA2,0,1,10,NORMAL,1,0\nA3,0,1,1,NORMAL,1,0\nA4,0,1,10,NORMAL,2,0\nB1,3,1,2,NORMAL,1,1\nB2,3,1,2,NORMAL,2,1\n"
     },
     {
       key: "rush_hour", title: "Rush hour (10 orders)", source: "tests/a2/comparison_a2.txt",
-      about: "10 orders and only 6 seats, so 8 of them wait outside. At t=2, O4 (1 seat) fits but waits behind O3 at the head of the line (head-of-line blocking). Compare FCFS, PRIORITY and SJF.",
+      about: "10 orders and only 6 chairs, so 8 of them wait outside. At t=2, O4 (1 chair) fits but waits behind O3 at the head of the line (head-of-line blocking). Compare FCFS, PRIORITY and SJF.",
       suggest: { scheduler: "SJF", allocator: "FIRST_FIT", unsafe: false },
       text: "10\n2\nO1,0,3,8,NORMAL,3,1\nO2,0,2,4,NORMAL,2,1\nO3,1,1,6,VIP,2,1\nO4,2,3,2,NORMAL,1,0\nO5,3,2,10,NORMAL,3,2\nO6,4,1,3,VIP,1,1\nO7,5,3,1,NORMAL,1,0\nO8,6,2,5,NORMAL,2,1\nO9,7,1,7,VIP,2,1\nO10,8,3,3,NORMAL,1,0\n"
     },

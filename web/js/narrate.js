@@ -16,12 +16,17 @@
   const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
   const pretty = id => (id || "").replace("_", " ");
 
-  /* "seats 2–3" / "seat 4" from a pool array and an owner. */
-  function slots(pool, id, word) {
-    const idx = [];
-    (pool || []).forEach((owner, i) => owner === id && idx.push(i));
-    if (!idx.length) return null;
-    return idx.length === 1 ? `${word} ${idx[0]}` : `${word}s ${idx[0]}–${idx[idx.length - 1]}`;
+  /* Chairs are not numbered on screen, so they are counted; tables are T1, T2, T3. */
+  function chairs(pool, id) {
+    const n = (pool || []).filter(o => o === id).length;
+    return n ? (n === 1 ? "1 chair" : `${n} chairs side by side`) : null;
+  }
+
+  function tables(pool, id) {
+    const names = [];
+    (pool || []).forEach((owner, i) => owner === id && names.push(`T${i + 1}`));
+    if (!names.length) return null;
+    return names.length === 1 ? `table ${names[0]}` : `tables ${names.join(" + ")}`;
   }
 
   /* Why the scheduler picked this order, in its own terms. */
@@ -38,7 +43,7 @@
   };
 
   N.allocatorRule = {
-    FIRST_FIT: "first gap that fits, scanning from seat 0",
+    FIRST_FIT: "first gap that fits, scanning from the left",
     BEST_FIT: "smallest gap that fits (least left over)",
     WORST_FIT: "largest gap (biggest left over)",
   };
@@ -63,8 +68,8 @@
     switch (ev.type) {
     case "ARRIVE": {
       const party = m.space_req === 1 ? "a party of 1" : `a party of ${m.space_req}`;
-      const needs = m.table_req ? `${plural(m.space_req, "seat")} + ${plural(m.table_req, "table")}`
-                                : `${plural(m.space_req, "seat")}, no table (takeaway)`;
+      const needs = m.table_req ? `${plural(m.space_req, "chair")} + ${plural(m.table_req, "table")}`
+                                : `${plural(m.space_req, "chair")}, no table (takeaway)`;
       text = `${id} arrives: ${party} (${m.category}, P${m.priority}, ${plural(m.service, "unit")} of cooking). Needs ${needs}.`;
       tag = "NEW";
       break;
@@ -72,18 +77,18 @@
     case "MEMORY_BLOCK": {
       const q = ctx.frame.queues.memory;
       const pos = q.indexOf(id);
-      const seats = m.space_req === 1 ? "1 seat" : `${m.space_req} adjacent seats`;
-      const tables = m.table_req === 0 ? "" : m.table_req === 1 ? " and 1 table" : ` and ${m.table_req} adjacent tables`;
+      const seats = m.space_req === 1 ? "1 chair" : `${m.space_req} chairs side by side`;
+      const tbl = m.table_req === 0 ? "" : m.table_req === 1 ? " and 1 table" : ` and ${m.table_req} tables side by side`;
       text = pos <= 0
-        ? `No room for ${id}: it needs ${seats}${tables} and no such gap is free. It waits outside, first in line.`
+        ? `No room for ${id}: it needs ${seats}${tbl} and no such gap is free. It waits outside, first in line.`
         : `${id} joins the line outside (#${pos + 1}). The line is first-in first-out, so it waits behind ${q[0]} even if a gap would fit it.`;
       tag = "BLOCKED_MEMORY";
       break;
     }
     case "MEMORY_ADMIT": {
-      const s = slots(ctx.frame.pools.SPACE, id, "seat");
-      const t = slots(ctx.frame.pools.TABLE, id, "table");
-      text = `${id} is seated at ${s}${t ? ` with ${t}` : " (takeaway, no table)"}. ${pretty(ctx.run.allocator)}: ${N.allocatorRule[ctx.run.allocator]}. The order goes to the kitchen.`;
+      const s = chairs(ctx.frame.pools.SPACE, id);
+      const t = tables(ctx.frame.pools.TABLE, id);
+      text = `${id} comes in and takes ${s}${t ? ` and ${t}` : " (takeaway, no table)"}. ${pretty(ctx.run.allocator)}: ${N.allocatorRule[ctx.run.allocator]}. Its order goes up on the board.`;
       tag = "READY";
       break;
     }
@@ -103,7 +108,7 @@
       break;
     }
     case "RESOURCE_BLOCK":
-      text = `${id} is blocked waiting for the ${res}. ${chef || "Its chef"} is free for other orders, and ${id} keeps its seats and anything it already holds.`;
+      text = `${id} is blocked waiting for the ${res}. ${chef || "Its chef"} is free for other orders, and ${id} keeps its chairs, table and anything it already holds.`;
       tag = "BLOCKED_RESOURCE";
       break;
     case "RESOURCE_RELEASE":
@@ -122,9 +127,10 @@
       tag = "READY";
       break;
     case "COMPLETE": {
-      const s = slots(ctx.prev.pools.SPACE, id, "seat");
-      const t = slots(ctx.prev.pools.TABLE, id, "table");
-      text = `${id} is served! The party leaves and ${[s, t].filter(Boolean).join(" and ")} ${s && t ? "are" : "is"} free again.`;
+      const n = ctx.prev.pools.SPACE.filter(o => o === id).length;
+      const t = tables(ctx.prev.pools.TABLE, id);
+      text = t ? `${id} is served at ${t.replace("table ", "").replace("tables ", "")}! The party eats and leaves; ${plural(n, "chair")} and ${t} are free again.`
+               : `${id} is ready! The party picks up its takeaway bag and leaves; ${plural(n, "chair")} ${n === 1 ? "is" : "are"} free again.`;
       tag = "TERMINATED";
       break;
     }
