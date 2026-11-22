@@ -36,18 +36,41 @@ typedef struct {
     int  table_req;
 } ProcessInput;
 
+/* A3 resource row: RESOURCE_ID,CAPACITY */
+typedef struct {
+    char id[MAX_ID_LEN];
+    int  capacity;
+    int  rank;                /* position in the global acquisition order */
+} ResourceInput;
+
+typedef enum { ACTION_ACQUIRE = 0, ACTION_RELEASE } ActionKind;
+
+/* A3 action row: ID,WORK_OFFSET,ACTION,RESOURCE_ID,UNITS (indices, not names) */
+typedef struct {
+    int        process;       /* index into Workload.processes */
+    int        offset;        /* units of the order's own service done so far */
+    ActionKind kind;
+    int        resource;      /* index into Workload.resources */
+    int        units;
+} ActionInput;
+
 typedef struct {
     int           n;          /* number of processes */
     int           q;          /* RR quantum (read, unused by Restaurant schedulers) */
     ProcessInput *processes;  /* n entries, heap-allocated; free with workload_free */
-    /* A3: resource definitions/actions go here. */
+    int           lines_read; /* input lines consumed so far, for A3 error line numbers */
+    int            resource_count;   /* A3: R; 0 if the sections are omitted */
+    ResourceInput *resources;
+    int            action_count;     /* A3: K */
+    ActionInput   *actions;          /* in input-row order */
 } Workload;
 
 typedef struct {
     SchedulerKind scheduler;
     AllocatorKind allocator;
     Phase         phase;
-    /* A3: unsafe-demo mode / prevention policy go here. */
+    int           unsafe_demo;       /* 1: deadlock prevention OFF (bounded demo) */
+    const char   *resource_log;      /* resource-event trace file, "-" = stderr, NULL = none */
 } SimulationConfig;
 
 /* Final per-process result (shared-data.md section 2). */
