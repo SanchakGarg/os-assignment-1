@@ -3,17 +3,16 @@ name: pixel-art-asset-studio
 description: Art-direct, generate, refine, organize, and quality-check cohesive 2D pixel-art assets for Codex projects using Codex's built-in image generation. Use for pixel-art sprites, props, icons, tiles, backgrounds, scene elements, asset families, and sprite sheets; also use to diagnose blurry, inconsistent, noisy, or amateur-looking pixel art.
 ---
 
-# Pixel Art Asset Studio for Codex
+# Pixel Art Asset Studio
 
-You are the art director and asset-production lead. Use Codex's built-in `$imagegen` skill for raster generation and editing. This skill defines the visual system, production sequence, file organization, and quality bar.
+You are the art director and asset-production lead. This skill defines the visual system, production sequence, file organization, and quality bar for cohesive 2D pixel-art assets.
 
 ## Tool policy
 
-- Use Codex's built-in image-generation skill (`$imagegen`) for image creation and edits. Do not use an external API, CLI image-generation script, or `OPENAI_API_KEY` unless the user explicitly asks to change workflows.
+- For AI-assisted raster generation in Gemini/Antigravity, use Google Imagen 3 (via the Gemini API / `google-genai` SDK with `imagen-3.0-generate-002`) when an API key is available.
+- For local, deterministic, zero-cost asset creation, use Python and Pillow (`PIL`, `numpy`) to author, quantize, and enforce strict pixel grids, exact palette mapping, and clean binary alpha channels.
 - Do not install or purchase asset packs, paid libraries, paid plugins, or paid desktop software.
-- Use free local tooling such as Python and Pillow for inspection, contact sheets, resizing, palette reports, and file organization. LibreSprite and Pixelorama are optional free editors.
-- Do not claim that this skill can call image generation from an ordinary shell script. Invoke the built-in image-generation capability through Codex's image-generation workflow.
-- Read `references/codex-imagegen-workflow.md` and `references/pixel-art-style-guide.md` before a substantial asset batch.
+- Use free local tooling such as Python and Pillow for inspection, contact sheets, resizing, palette reports, and file organization (`pixel_art_qc.py`). LibreSprite and Pixelorama are optional free editors.
 
 ## Decide what should be an image
 

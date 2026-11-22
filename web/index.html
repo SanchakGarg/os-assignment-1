@@ -18,6 +18,65 @@
         <div class="title-row"><h1 id="run-title">Dinner service</h1><span id="origin-badge" class="origin-badge">SYNTHETIC EXAMPLE</span><span id="run-meta" class="run-meta"></span></div>
         <div class="header-buttons"><button id="load-more" class="menu-button">☰ MENU</button></div>
       </div>
+
+      <section class="control-strip card">
+        <div class="control-row">
+          <div class="control-item">
+            <span class="control-label">BACKEND SERVER</span>
+            <div id="ws-status" class="ws-status connecting"><span class="status-dot"></span><span id="ws-text">Connecting...</span></div>
+          </div>
+          <div class="control-item">
+            <span class="control-label">SCHEDULER (A1)</span>
+            <select id="sel-scheduler" class="select-input">
+              <option value="FCFS">FCFS (First-Come)</option>
+              <option value="PRIORITY">PRIORITY (VIP First)</option>
+              <option value="SJF">SJF (Shortest Job)</option>
+            </select>
+          </div>
+          <div class="control-item">
+            <span class="control-label">ALLOCATOR (A2)</span>
+            <select id="sel-allocator" class="select-input">
+              <option value="FIRST_FIT">FIRST FIT</option>
+              <option value="BEST_FIT">BEST FIT</option>
+              <option value="WORST_FIT">WORST FIT</option>
+            </select>
+          </div>
+          <div class="control-item workload-item">
+            <span class="control-label">WORKLOAD</span>
+            <div class="workload-inputs">
+              <select id="sel-workload" class="select-input">
+                <option value="a3_integrated">A3: Integrated (Equipment + Memory)</option>
+                <option value="a3_contention">A3: Same Oven Contention</option>
+                <option value="a3_deadlock">A3: Deadlock (Circular Wait Demo)</option>
+                <option value="a3_safe">A3: Safe Resource Ordering</option>
+                <option value="a2_example">A2: Standard Multi-Order Rush</option>
+                <option value="custom">Custom .txt file...</option>
+              </select>
+              <input id="server-file-input" type="file" accept=".txt,.json" class="custom-file-picker hidden">
+            </div>
+          </div>
+          <div class="control-item checkbox-item">
+            <label class="toggle-checkbox" title="Demonstrate deadlock when processes acquire resources out of order">
+              <input type="checkbox" id="chk-unsafe-demo">
+              <span>Unsafe Demo</span>
+            </label>
+          </div>
+          <div class="control-item button-item">
+            <button id="btn-start-sim" class="primary-button run-simulation-button">▶ RUN LIVE</button>
+            <button id="btn-ws-reconnect" class="secondary-button reconnect-button" title="Reconnect WebSocket">↺</button>
+          </div>
+        </div>
+      </section>
+
+      <div id="deadlock-banner" class="deadlock-banner hidden">
+        <div class="deadlock-banner-inner">
+          <span class="deadlock-icon">⚠️</span>
+          <div>
+            <strong id="deadlock-banner-title">CIRCULAR WAIT DEADLOCK ENCOUNTERED</strong>
+            <p id="deadlock-banner-message">Two or more orders are mutually waiting on held equipment.</p>
+          </div>
+        </div>
+      </div>
       <div class="sim-grid">
         <section class="scene-card card">
           <div class="card-heading"><div><span class="eyebrow">THE FLOOR</span><h2>Kitchen cam</h2></div><span id="time-chip" class="time-chip">TICK 0</span></div>

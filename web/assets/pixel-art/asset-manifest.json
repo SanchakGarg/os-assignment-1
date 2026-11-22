@@ -101,6 +101,175 @@
       "transparency": "required",
       "animation": "static style anchor",
       "tiling": "none"
+    },
+    {
+      "id": "chef_cook_02",
+      "filename": "chef-cook-02.png",
+      "subject": "Second chef (Chef 1), front-facing, stirring pan; cream toque, teal slate jacket, honey light apron",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        17,
+        4,
+        43,
+        60
+      ],
+      "facing": "front, slight three-quarter turn",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Honey Light",
+        "Apricot",
+        "Linen",
+        "Teal Slate",
+        "Hearth Gold"
+      ],
+      "transparency": "required",
+      "animation": "single idle/action pose anchor",
+      "tiling": "none"
+    },
+    {
+      "id": "table_empty_01",
+      "filename": "table-empty-01.png",
+      "subject": "Small square oak dining table, clean empty oak surface with elevated top and front edge",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        11,
+        16,
+        53,
+        61
+      ],
+      "facing": "front with visible top plane",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Roast Umber",
+        "Tavern Oak",
+        "Honey Light",
+        "Linen"
+      ],
+      "transparency": "required",
+      "animation": "static style anchor",
+      "tiling": "none"
+    },
+    {
+      "id": "microwave_01",
+      "filename": "microwave-01.png",
+      "subject": "Vintage countertop restaurant microwave appliance, dark glass door with interior turntable glow and dial panel",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        15,
+        30,
+        52,
+        61
+      ],
+      "facing": "front with visible top plane",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Roast Umber",
+        "Linen",
+        "Teal Slate",
+        "Tomato",
+        "Hearth Gold"
+      ],
+      "transparency": "required",
+      "animation": "static appliance anchor",
+      "tiling": "none"
+    },
+    {
+      "id": "coffeemachine_01",
+      "filename": "coffeemachine-01.png",
+      "subject": "Vintage Italian commercial espresso coffee machine, brass manometer, group heads, portafilter, and top cup warming rack",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        16,
+        18,
+        52,
+        62
+      ],
+      "facing": "front with visible top plane",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Roast Umber",
+        "Tavern Oak",
+        "Linen",
+        "Teal Slate",
+        "Hearth Gold"
+      ],
+      "transparency": "required",
+      "animation": "static appliance anchor",
+      "tiling": "none"
+    },
+    {
+      "id": "chair_waiting_01",
+      "filename": "chair-waiting-01.png",
+      "subject": "Cozy wooden diner chair with sage cushion and turned oak legs, used for SPACE memory pool seating",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        20,
+        20,
+        48,
+        61
+      ],
+      "facing": "front with visible seat plane",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Roast Umber",
+        "Tavern Oak",
+        "Honey Light",
+        "Sage",
+        "Leaf"
+      ],
+      "transparency": "required",
+      "animation": "static furniture anchor",
+      "tiling": "none"
+    },
+    {
+      "id": "diner_01",
+      "filename": "diner-01.png",
+      "subject": "Cozy restaurant customer / patron in warm knit tomato sweater with hearth gold pattern and dark trousers",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        21,
+        14,
+        44,
+        61
+      ],
+      "facing": "front, slight turn",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Roast Umber",
+        "Tavern Oak",
+        "Honey Light",
+        "Apricot",
+        "Linen",
+        "Tomato",
+        "Hearth Gold"
+      ],
+      "transparency": "required",
+      "animation": "character anchor",
+      "tiling": "none"
     }
   ]
 }
