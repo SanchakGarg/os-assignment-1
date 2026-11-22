@@ -574,13 +574,20 @@ function render() {
   }
   const f = frame();
 
+  const metaText = `${r.run.phase || 'A3'} · ${r.run.scheduler} · ${r.run.allocator} · ${r.model.processes.length} orders`;
   $('run-title').textContent = r.run.id || 'Dinner service';
   $('origin-badge').textContent = r.run.origin === 'SYNTHETIC' ? 'SYNTHETIC EXAMPLE' : 'RECORDED RUN';
   $('origin-badge').classList.toggle('recorded', r.run.origin === 'RECORDED');
-  $('run-meta').textContent = `${r.run.phase || 'A3'} · ${r.run.scheduler} · ${r.run.allocator} · ${r.model.processes.length} orders`;
+  $('run-meta').textContent = metaText;
+
+  const fsMeta = $('fs-run-meta');
+  if (fsMeta) fsMeta.textContent = `${r.run.scheduler} / ${r.run.allocator} · ${r.model.processes.length} orders`;
 
   if (f) {
-    $('time-chip').textContent = `TICK ${f.time}`;
+    const timeText = `TICK ${f.time}`;
+    $('time-chip').textContent = timeText;
+    const fsTime = $('fs-time-chip');
+    if (fsTime) fsTime.textContent = timeText;
     $('time-display').textContent = String(f.time).padStart(2, '0');
   }
 
@@ -590,8 +597,15 @@ function render() {
   $('timeline-end').textContent = `TICK ${r.run.end_time || (f ? f.time : 0)}`;
   $('order-count').textContent = r.model.processes.length;
 
-  $('play-button').textContent = state.playing ? 'Ⅱ' : '▶';
-  $('speed-button').textContent = `${state.speed}×`;
+  const playIcon = state.playing ? 'Ⅱ' : '▶';
+  $('play-button').textContent = playIcon;
+  const fsPlay = $('fs-play-btn');
+  if (fsPlay) fsPlay.textContent = playIcon;
+
+  const speedText = `${state.speed}×`;
+  $('speed-button').textContent = speedText;
+  const fsSpeed = $('fs-speed-btn');
+  if (fsSpeed) fsSpeed.textContent = speedText;
 
   if (f) {
     drawRestaurant($('game-canvas'), r, f);
@@ -603,337 +617,222 @@ function render() {
   results(r);
 }
 
-function orders(r, f) {
-  const list = [...f.processes];
-  list.sort((a, b) => {
-    if (state.arrival) {
-      const sa = r.model.processes.find(x => x.id === a.id)?.arrival ?? 0;
-      const sb = r.model.processes.find(x => x.id === b.id)?.arrival ?? 0;
-      return sa - sb;
-    }
-    return a.id.localeCompare(b.id);
-  });
+// Helper to draw clean high-contrast rounded HUD pill badges
+function drawPillBadge(c, text, x, y, opt = {}) {
+  const font = opt.font || 'bold 11px system-ui, -apple-system, sans-serif';
+  c.font = font;
+  const padX = opt.padX ?? 8;
+  const padY = opt.padY ?? 4;
+  const metrics = c.measureText(text);
+  const textW = metrics.width;
+  const textH = opt.fontSize || 12;
+  const w = textW + padX * 2;
+  const h = textH + padY * 2;
+  const rx = opt.center ? Math.round(x - w / 2) : Math.round(x);
+  const ry = opt.center ? Math.round(y - h / 2) : Math.round(y);
 
-  $('sort-button').textContent = state.arrival ? 'BY ARRIVAL ↕' : 'BY ID ↕';
-  $('order-list').replaceChildren(...list.map(p => {
-    const spec = r.model.processes.find(x => x.id === p.id) || { category: 'NORMAL', service: p.executed_service + p.remaining_service };
-    const row = document.createElement('div');
-    row.className = 'order-row';
+  // Drop shadow
+  c.fillStyle = 'rgba(0, 0, 0, 0.45)';
+  c.beginPath();
+  c.roundRect(rx + 1, ry + 2, w, h, 4);
+  c.fill();
 
-    const s1 = document.createElement('span');
-    s1.className = 'order-stamp';
-    s1.textContent = p.id;
+  // Background
+  c.fillStyle = opt.bg || '#263A34';
+  c.beginPath();
+  c.roundRect(rx, ry, w, h, 4);
+  c.fill();
 
-    const s2 = document.createElement('span');
-    s2.className = 'order-detail';
-    const holdsText = p.holds && p.holds.length ? ` · holding ${p.holds.join(',')}` : '';
-    const waitText = p.waits_for ? ` · waiting ${p.waits_for}` : '';
-    s2.textContent = `${spec.category} · ${p.executed_service}/${spec.service} cooked${holdsText}${waitText}`;
-
-    const s3 = document.createElement('span');
-    s3.className = 'state-badge state-' + p.state;
-    s3.textContent = p.state.replace('BLOCKED_', 'WAIT ');
-
-    row.append(s1, s2, s3);
-    return row;
-  }));
-}
-
-function events(r, f) {
-  const recent = [];
-  for (let i = state.frame; i >= 0 && recent.length < 7; i--) {
-    const fr = r.frames[i];
-    if (fr && fr.events) {
-      for (const e of [...fr.events].reverse()) {
-        recent.push({ time: fr.time, event: e });
-      }
-    }
-  }
-  if (!recent.length) {
-    recent.push({ time: f.time, event: { type: 'ARRIVE', reason: 'The dining room is ready.' } });
+  // High-contrast Border
+  if (opt.border) {
+    c.strokeStyle = opt.border;
+    c.lineWidth = opt.borderWidth || 1.5;
+    c.stroke();
   }
 
-  $('event-list').replaceChildren(...recent.slice(0, 7).map(x => {
-    const row = document.createElement('div');
-    row.className = 'event-row';
-
-    const tm = document.createElement('span');
-    tm.className = 'event-time';
-    tm.textContent = String(x.time).padStart(2, '0');
-
-    const body = document.createElement('span');
-    const type = document.createElement('span');
-    type.className = 'event-type';
-    type.textContent = (NAMES[x.event.type] || x.event.type || 'Update').toUpperCase();
-
-    body.append(
-      type,
-      document.createElement('br'),
-      document.createTextNode(`${x.event.process_id ? x.event.process_id + ' · ' : ''}${x.event.resource ? '[' + x.event.resource + '] ' : ''}${x.event.reason || NAMES[x.event.type] || 'Restaurant updated'}`)
-    );
-
-    row.append(tm, body);
-    return row;
-  }));
-}
-
-function memory(f) {
-  $('memory-pools').replaceChildren(...[['SPACE', f.pools.SPACE], ['TABLE', f.pools.TABLE]].map(([name, slots]) => {
-    const wrap = document.createElement('div');
-    const title = document.createElement('div');
-    const cells = document.createElement('div');
-
-    title.className = 'pool-name';
-    title.innerHTML = `<strong>${name}</strong><span>${slots.filter(Boolean).length}/${slots.length} IN USE</span>`;
-    cells.className = 'pool-slots';
-
-    cells.replaceChildren(...slots.map((owner, i) => {
-      const e = document.createElement('div');
-      e.className = 'memory-slot' + (owner ? (name === 'TABLE' ? ' table-owned' : ' owned') : '');
-      e.title = `${name} slot ${i + 1}: ${owner || 'free'}`;
-      e.textContent = i;
-      const sub = document.createElement('span');
-      sub.textContent = owner || 'free';
-      e.append(sub);
-      return e;
-    }));
-
-    wrap.append(title, cells);
-    return wrap;
-  }));
-}
-
-function equipment(r, f) {
-  const list = f.resources || [];
-  $('resource-summary').textContent = r.run.phase === 'A2' ? 'Equipment added in A3' : `${list.length} DECLARED ITEMS`;
-
-  $('resource-list').replaceChildren(...list.map(x => {
-    const e = document.createElement('div');
-    e.className = 'resource-tile' + (x.holder ? ' held' : '');
-
-    const n = document.createElement('div');
-    n.className = 'resource-name';
-    n.textContent = x.id.replace('_', ' ');
-
-    const o = document.createElement('div');
-    o.className = 'resource-owner';
-    const waitingList = x.waiting && x.waiting.length ? ` (Queue: ${x.waiting.join(', ')})` : '';
-    o.textContent = x.holder ? `In use by ${x.holder}${waitingList}` : 'Ready for cooking';
-
-    e.append(n, o);
-    return e;
-  }));
-}
-
-function results(r) {
-  const s = r.results.summary;
-  const values = [
-    ['AVG WAIT', s.average_waiting],
-    ['AVG TURNAROUND', s.average_turnaround],
-    ['CHEF USE', s.service_utilization_pct != null ? `${s.service_utilization_pct}%` : '...'],
-    ['THROUGHPUT', s.throughput],
-    ['MEM WAIT', s.average_memory_wait ?? '...'],
-    ['RES WAIT', s.average_resource_wait ?? '0.00']
-  ];
-
-  $('summary-stats').replaceChildren(...values.map(([label, value]) => {
-    const e = document.createElement('div');
-    e.className = 'stat';
-    const a = document.createElement('span');
-    const b = document.createElement('strong');
-    a.textContent = label;
-    b.textContent = typeof value === 'number' ? Number(value.toFixed(2)) : value;
-    e.append(a, b);
-    return e;
-  }));
-}
-
-function showCases() {
-  $('case-modal').classList.remove('hidden');
-  const choices = [];
-
-  for (const x of EXAMPLES) {
-    const b = document.createElement('button');
-    b.className = 'case-choice';
-    b.textContent = x.name;
-    const sm = document.createElement('small');
-    sm.textContent = 'OPEN PRESET RECORDING';
-    b.append(sm);
-    b.onclick = () => {
-      stop();
-      loadExample(x);
-      $('case-modal').classList.add('hidden');
-    };
-    choices.push(b);
-  }
-
-  for (const [i, r] of state.runs.entries()) {
-    const b = document.createElement('button');
-    b.className = 'case-choice';
-    b.textContent = `${r.run.id}${i === state.active ? ' · ACTIVE' : ''}`;
-    const sm = document.createElement('small');
-    sm.textContent = `${r.run.phase} · ${r.run.scheduler} · ${r.run.allocator} · ${r.model.processes.length} orders`;
-    b.append(sm);
-    b.onclick = () => {
-      stop();
-      state.active = i;
-      state.frame = 0;
-      $('case-modal').classList.add('hidden');
-      render();
-    };
-    choices.push(b);
-  }
-
-  $('case-list').replaceChildren(...choices);
+  // Text
+  c.fillStyle = opt.color || '#F3E4BD';
+  c.textAlign = 'left';
+  c.textBaseline = 'middle';
+  c.fillText(text, rx + padX, ry + h / 2);
 }
 
 // -----------------------------------------------------------------------------
-// The Pixel-Art Canvas Scene Renderer
+// The Pixel-Art Canvas Scene Renderer (Crisp Native High-Resolution HUD)
 // -----------------------------------------------------------------------------
 function drawRestaurant(canvas, r, f) {
   if (!canvas) return;
   const box = canvas.getBoundingClientRect();
   if (!box.width || !box.height) return;
 
-  const scale = 2; // integer pixel scale
-  const W = Math.max(1, Math.floor(box.width / scale));
-  const H = Math.max(1, Math.floor(box.height / scale));
+  const dpr = window.devicePixelRatio || 1;
+  const W = Math.round(box.width);
+  const H = Math.round(box.height);
 
-  if (canvas.width !== W || canvas.height !== H) {
-    canvas.width = W;
-    canvas.height = H;
+  if (canvas.width !== Math.round(W * dpr) || canvas.height !== Math.round(H * dpr)) {
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
   }
 
   const c = canvas.getContext('2d');
+  c.save();
+  c.scale(dpr, dpr);
   c.imageSmoothingEnabled = false;
 
   const now = performance.now();
   const animTick = Math.floor(now / 180);
 
-  // 1. DINING ROOM & KITCHEN FLOORING
-  // Checkerboard floor for kitchen (top half)
-  const kitchenH = Math.floor(H * 0.48);
-  const tileSize = 16;
+  // Layout parameters
+  const wallH = Math.max(48, Math.floor(H * 0.16));
+  const kitchenH = Math.max(160, Math.floor(H * 0.48));
+  const passY = kitchenH - 12;
 
+  // 1. FLOORING
+  // Checkerboard terracotta tiles for kitchen
+  const tileSize = 20;
   for (let y = 0; y < kitchenH; y += tileSize) {
     for (let x = 0; x < W; x += tileSize) {
-      c.fillStyle = ((x / tileSize + y / tileSize) % 2 === 0) ? '#D0B27B' : '#C3A36D';
+      c.fillStyle = ((Math.floor(x / tileSize) + Math.floor(y / tileSize)) % 2 === 0) ? '#D0B27B' : '#C3A36D';
       c.fillRect(x, y, tileSize, tileSize);
     }
   }
 
-  // Oak plank floor for dining area (bottom half)
-  for (let y = kitchenH; y < H; y += 8) {
-    c.fillStyle = (Math.floor(y / 8) % 2 === 0) ? '#956448' : '#87573E';
-    c.fillRect(0, y, W, 8);
-    // Plank joint lines
+  // Oak planks for dining room
+  for (let y = kitchenH; y < H; y += 12) {
+    c.fillStyle = (Math.floor(y / 12) % 2 === 0) ? '#956448' : '#87573E';
+    c.fillRect(0, y, W, 12);
     c.fillStyle = '#684638';
     c.fillRect(0, y, W, 1);
-    for (let x = (y * 5) % 32; x < W; x += 32) {
-      c.fillRect(x, y, 1, 8);
+    for (let x = (y * 7) % 48; x < W; x += 48) {
+      c.fillRect(x, y, 1, 12);
     }
   }
 
   // 2. REAR KITCHEN WALL
-  c.fillStyle = '#684638';
-  c.fillRect(0, 0, W, 32);
-  c.fillStyle = '#956448';
-  c.fillRect(0, 30, W, 3);
+  c.fillStyle = '#5A382C';
+  c.fillRect(0, 0, W, wallH);
+  c.fillStyle = '#87573E';
+  c.fillRect(0, wallH - 4, W, 4);
   c.fillStyle = '#3B3731';
-  c.fillRect(0, 32, W, 2);
+  c.fillRect(0, wallH, W, 2);
 
-  // Decorative Wall Shelf with Spices & Vintage Copper Pot
+  // Upper shelf with spice jars
   c.fillStyle = '#3B3731';
-  c.fillRect(16, 12, W - 32, 3);
-  for (let x = 24; x < W - 32; x += 22) {
-    // Spice jar
+  c.fillRect(20, Math.floor(wallH * 0.4), W - 40, 4);
+  for (let x = 32; x < W - 50; x += 30) {
     const colors = [PALETTE.leaf, PALETTE.hearthGold, PALETTE.tomato, PALETTE.tealSlate];
-    c.fillStyle = colors[(x * 7) % colors.length];
-    c.fillRect(x, 6, 7, 6);
+    c.fillStyle = colors[(x * 5) % colors.length];
+    c.fillRect(x, Math.floor(wallH * 0.4) - 9, 10, 9);
     c.fillStyle = PALETTE.linen;
-    c.fillRect(x + 1, 5, 5, 2);
+    c.fillRect(x + 2, Math.floor(wallH * 0.4) - 11, 6, 3);
   }
 
-  // Vintage wall clock in center
+  // Central Clock
   const clockX = Math.floor(W * 0.5);
+  const clockY = Math.floor(wallH * 0.4);
   c.fillStyle = PALETTE.warmInk;
-  c.fillRect(clockX - 7, 4, 14, 14);
+  c.fillRect(clockX - 10, clockY - 14, 20, 20);
   c.fillStyle = PALETTE.linen;
-  c.fillRect(clockX - 5, 6, 10, 10);
+  c.fillRect(clockX - 8, clockY - 12, 16, 16);
   c.fillStyle = PALETTE.warmInk;
-  c.fillRect(clockX - 1, 10, 3, 2); // Hands
-  c.fillRect(clockX, 8, 1, 3);
+  c.fillRect(clockX - 1, clockY - 6, 3, 3);
+  c.fillRect(clockX, clockY - 9, 2, 5);
 
-  // 3. SERVICE PASS COUNTER (separates kitchen from dining room)
-  const passY = kitchenH - 6;
+  // 3. SERVICE PASS COUNTER
   c.fillStyle = '#684638';
-  c.fillRect(0, passY, W, 10);
+  c.fillRect(0, passY, W, 12);
   c.fillStyle = '#956448';
-  c.fillRect(0, passY + 2, W, 6);
+  c.fillRect(0, passY + 2, W, 8);
   c.fillStyle = '#C48A56';
-  c.fillRect(0, passY + 2, W, 1); // Counter edge highlight
+  c.fillRect(0, passY + 2, W, 2); // Highlight
 
-  // Service pickup bell on counter
+  // Service pickup bell
   c.fillStyle = PALETTE.hearthGold;
-  c.fillRect(W - 40, passY - 3, 7, 5);
+  c.fillRect(W - 48, passY - 4, 10, 6);
   c.fillStyle = PALETTE.warmInk;
-  c.fillRect(W - 38, passY - 5, 3, 2);
+  c.fillRect(W - 45, passY - 7, 4, 3);
 
-  // 4. KITCHEN APPLIANCES (A3 Shared Equipment)
-  // Placement: OVEN_1, OVEN_2, MICROWAVE, COFFEE_MACHINE
-  const appY = 32;
+  // 4. KITCHEN APPLIANCES (Shared Equipment: OVEN_1, OVEN_2, MICROWAVE, COFFEE_MACHINE)
+  const appW = Math.min(68, Math.max(54, Math.floor(W * 0.1)));
+  const appH = appW;
+  const appY = wallH + 6;
+
   const appliances = [
-    { id: 'OVEN_1', name: 'OVEN 1', img: SPRITES.oven, x: 20 },
-    { id: 'OVEN_2', name: 'OVEN 2', img: SPRITES.oven, x: 90 },
-    { id: 'MICROWAVE', name: 'MICROWAVE', img: SPRITES.microwave, x: 160 },
-    { id: 'COFFEE_MACHINE', name: 'COFFEE', img: SPRITES.coffeemachine, x: 230 }
+    { id: 'OVEN_1', name: 'OVEN 1', img: SPRITES.oven },
+    { id: 'OVEN_2', name: 'OVEN 2', img: SPRITES.oven },
+    { id: 'MICROWAVE', name: 'MICROWAVE', img: SPRITES.microwave },
+    { id: 'COFFEE_MACHINE', name: 'COFFEE MACHINE', img: SPRITES.coffeemachine }
   ];
 
-  appliances.forEach(app => {
+  const totalAppWidth = (appliances.length * appW);
+  const availWidth = Math.max(W - 140, totalAppWidth + 60);
+  const appGap = Math.max(16, Math.floor((availWidth - totalAppWidth) / 4));
+
+  appliances.forEach((app, idx) => {
+    const ax = 20 + idx * (appW + appGap);
     const resData = f.resources ? f.resources.find(r => r.id === app.id) : null;
     const isHeld = !!(resData && resData.holder);
     const waitingOrders = resData && resData.waiting ? resData.waiting : [];
 
-    // Draw sprite (64x64 scaled to 48x48)
-    const dw = 48, dh = 48;
+    // Header Title Badge
+    drawPillBadge(c, app.name, ax + appW / 2, appY - 8, {
+      bg: '#263A34',
+      color: '#F3E4BD',
+      border: '#684638',
+      center: true,
+      font: 'bold 11px system-ui, monospace',
+      padX: 7,
+      padY: 3
+    });
+
+    // Draw Appliance Sprite
     if (app.img && app.img.complete && app.img.naturalWidth > 0) {
-      c.drawImage(app.img, app.x, appY, dw, dh);
+      c.drawImage(app.img, ax, appY, appW, appH);
     }
 
-    // Active cooking glow effect when held
+    // Active Cooking Animation / Glow
     if (isHeld) {
-      // Warm glow behind/around
       c.fillStyle = (animTick % 2 === 0) ? 'rgba(240, 199, 104, 0.45)' : 'rgba(224, 180, 119, 0.35)';
-      c.fillRect(app.x + 8, appY + 26, dw - 16, 14);
+      c.fillRect(ax + 8, appY + appH * 0.45, appW - 16, appH * 0.4);
 
-      // Steam / flame puffs
-      const puffX = app.x + 20 + ((animTick % 3) * 3);
-      const puffY = appY + 14 - ((animTick % 4) * 2);
-      c.fillStyle = 'rgba(243, 228, 189, 0.8)';
-      c.fillRect(puffX, puffY, 3, 3);
+      // Steam puffs rising
+      const puffX = ax + appW * 0.45 + ((animTick % 3) * 4);
+      const puffY = appY + 8 - ((animTick % 4) * 3);
+      c.fillStyle = 'rgba(243, 228, 189, 0.9)';
+      c.fillRect(puffX, puffY, 4, 4);
+      c.fillRect(puffX + 3, puffY - 4, 3, 3);
     }
 
-    // Badge showing Holder
-    const labelY = appY + dh + 1;
-    c.font = 'bold 6px monospace';
+    // Status Pill below sprite
+    const badgeY = appY + appH + 10;
     if (isHeld) {
-      c.fillStyle = PALETTE.tomato;
-      c.fillRect(app.x + 4, labelY, dw - 8, 8);
-      c.fillStyle = PALETTE.linen;
-      c.fillText(`USE: ${resData.holder}`, app.x + 6, labelY + 6);
+      drawPillBadge(c, `🔥 IN USE: ${resData.holder}`, ax + appW / 2, badgeY, {
+        bg: '#B95743',
+        color: '#FFFFFF',
+        border: '#F0C768',
+        borderWidth: 2,
+        center: true,
+        font: 'bold 11px system-ui, monospace'
+      });
     } else {
-      c.fillStyle = PALETTE.warmInk;
-      c.fillRect(app.x + 6, labelY, dw - 12, 7);
-      c.fillStyle = PALETTE.leaf;
-      c.fillText('READY', app.x + 14, labelY + 6);
+      drawPillBadge(c, '● READY', ax + appW / 2, badgeY, {
+        bg: '#1C3A2E',
+        color: '#81B58B',
+        border: '#45816A',
+        center: true,
+        font: 'bold 11px system-ui, monospace'
+      });
     }
 
-    // Wait queue badge if orders are waiting
+    // Wait Queue Badge if orders are waiting
     if (waitingOrders.length > 0) {
-      c.fillStyle = '#E0B477';
-      c.fillRect(app.x + 4, labelY + 9, dw - 8, 7);
-      c.fillStyle = '#263A34';
-      c.fillText(`WAIT: ${waitingOrders.join(',')}`, app.x + 6, labelY + 15);
+      drawPillBadge(c, `⏳ WAIT: ${waitingOrders.join(', ')}`, ax + appW / 2, badgeY + 20, {
+        bg: '#F0C768',
+        color: '#263A34',
+        border: '#684638',
+        center: true,
+        font: 'bold 10px system-ui, monospace'
+      });
     }
   });
 
@@ -943,194 +842,310 @@ function drawRestaurant(canvas, r, f) {
   const p0 = chef0Id ? f.processes.find(p => p.id === chef0Id) : null;
   const p1 = chef1Id ? f.processes.find(p => p.id === chef1Id) : null;
 
-  const chef0Bob = (p0 && p0.state === 'RUNNING') ? (animTick % 2) : 0;
-  const chef1Bob = (p1 && p1.state === 'RUNNING') ? ((animTick + 1) % 2) : 0;
+  const chef0Bob = (p0 && p0.state === 'RUNNING') ? (animTick % 2) * 2 : 0;
+  const chef1Bob = (p1 && p1.state === 'RUNNING') ? ((animTick + 1) % 2) * 2 : 0;
 
-  // Station positions
-  const chef0X = 60, chef0Y = passY - 38 + chef0Bob;
-  const chef1X = 135, chef1Y = passY - 38 + chef1Bob;
+  const chefW = Math.min(56, Math.max(44, Math.floor(W * 0.08)));
+  const chefH = chefW;
 
-  // Draw Chef 0 (chef-cook-01.png)
+  const chef0X = Math.floor(W * 0.22);
+  const chef0Y = passY - chefH - 6 + chef0Bob;
+  const chef1X = Math.floor(W * 0.54);
+  const chef1Y = passY - chefH - 6 + chef1Bob;
+
+  // Chef 0 Sprite
   if (SPRITES.chef0.complete && SPRITES.chef0.naturalWidth > 0) {
-    c.drawImage(SPRITES.chef0, chef0X, chef0Y, 44, 44);
+    c.drawImage(SPRITES.chef0, chef0X, chef0Y, chefW, chefH);
   }
-  // Draw Chef 1 (chef-cook-02.png)
+  // Chef 1 Sprite
   if (SPRITES.chef1.complete && SPRITES.chef1.naturalWidth > 0) {
-    c.drawImage(SPRITES.chef1, chef1X, chef1Y, 44, 44);
+    c.drawImage(SPRITES.chef1, chef1X, chef1Y, chefW, chefH);
   }
 
-  // Chef labels & state tags
-  drawChefTag(c, chef0X, chef0Y, 'CHEF 0', chef0Id, p0, animTick);
-  drawChefTag(c, chef1X, chef1Y, 'CHEF 1', chef1Id, p1, animTick);
+  // Draw Chef Badges
+  drawChefHUD(c, chef0X, chef0Y, chefW, chefH, 'CHEF 0', chef0Id, p0, animTick);
+  drawChefHUD(c, chef1X, chef1Y, chefW, chefH, 'CHEF 1', chef1Id, p1, animTick);
 
-  // 6. WAITING LOUNGE (SPACE POOL - 6 Seats)
-  // Drawn on the bottom left (x: 10..180, y: passY + 24)
+  // 6. WAITING LOUNGE (SPACE POOL · 6 SEATS)
   const spaceSlots = f.pools.SPACE || [];
-  const spaceBaseX = 14;
-  const spaceY = passY + 22;
+  const spaceBaseX = 20;
+  const spaceY = passY + 20;
+  const chairW = Math.min(38, Math.max(30, Math.floor(W * 0.05)));
+  const chairH = chairW;
+  const chairGap = Math.min(10, Math.max(4, Math.floor((W * 0.42 - 6 * chairW) / 5)));
 
-  // Lounge rug under chairs
+  // Lounge rug
+  const rugW = (6 * (chairW + chairGap)) + 16;
   c.fillStyle = '#587A78';
-  c.fillRect(spaceBaseX - 4, spaceY + 4, (6 * 26) + 8, 38);
+  c.fillRect(spaceBaseX - 8, spaceY + 12, rugW, chairH + 34);
   c.fillStyle = '#758B63';
-  c.fillRect(spaceBaseX - 2, spaceY + 6, (6 * 26) + 4, 34);
+  c.fillRect(spaceBaseX - 6, spaceY + 14, rugW - 4, chairH + 30);
 
-  // Label
-  c.font = 'bold 6px monospace';
-  c.fillStyle = PALETTE.linen;
-  c.fillText('WAITING SEATS (SPACE POOL · 6 SLOTS)', spaceBaseX, spaceY + 2);
+  // Section Header Ribbon
+  drawPillBadge(c, '🪑 WAITING LOUNGE (SPACE POOL · 6 SEATS)', spaceBaseX + rugW / 2, spaceY + 4, {
+    bg: '#263A34',
+    color: '#F3E4BD',
+    border: '#A4B47A',
+    center: true,
+    font: 'bold 11px system-ui, sans-serif'
+  });
 
   spaceSlots.forEach((owner, i) => {
-    const chairX = spaceBaseX + (i * 26);
-    const chairY = spaceY + 8;
+    const cx = spaceBaseX + i * (chairW + chairGap);
+    const cy = spaceY + 20;
 
-    // Draw chair sprite (32x32)
+    // Chair sprite
     if (SPRITES.chair.complete && SPRITES.chair.naturalWidth > 0) {
-      c.drawImage(SPRITES.chair, chairX, chairY, 26, 26);
+      c.drawImage(SPRITES.chair, cx, cy, chairW, chairH);
     }
 
-    // If occupied by an order, draw seated diner sprite!
     if (owner) {
+      // Seated Customer
       if (SPRITES.diner.complete && SPRITES.diner.naturalWidth > 0) {
-        c.drawImage(SPRITES.diner, chairX, chairY - 6, 26, 26);
+        c.drawImage(SPRITES.diner, cx, cy - 8, chairW, chairH);
       }
-      // Order tag pill
-      c.fillStyle = PALETTE.tomato;
-      c.fillRect(chairX + 2, chairY + 22, 22, 7);
-      c.fillStyle = PALETTE.linen;
-      c.fillText(owner, chairX + 4, chairY + 28);
+      // Seat Pill: Occupied
+      drawPillBadge(c, `S${i + 1}: ${owner}`, cx + chairW / 2, cy + chairH + 8, {
+        bg: '#B95743',
+        color: '#FFFFFF',
+        border: '#F0C768',
+        center: true,
+        font: 'bold 11px monospace',
+        padX: 4,
+        padY: 2
+      });
     } else {
-      // Free seat marker
-      c.fillStyle = PALETTE.warmInk;
-      c.fillRect(chairX + 4, chairY + 23, 18, 6);
-      c.fillStyle = PALETTE.leaf;
-      c.fillText(`S${i+1}`, chairX + 6, chairY + 28);
+      // Seat Pill: Free
+      drawPillBadge(c, `S${i + 1} [OPEN]`, cx + chairW / 2, cy + chairH + 8, {
+        bg: '#3B3731',
+        color: '#A4B47A',
+        center: true,
+        font: 'bold 10px monospace',
+        padX: 4,
+        padY: 2
+      });
     }
   });
 
-  // 7. DINING ROOM (TABLE POOL - 3 Tables)
-  // Drawn on the bottom right (x: 190..W-20, y: passY + 20)
+  // 7. DINING ROOM (TABLE POOL · 3 TABLES)
   const tableSlots = f.pools.TABLE || [];
-  const tableBaseX = Math.max(195, W - 180);
-  const tableY = passY + 18;
+  const tableW = Math.min(64, Math.max(50, Math.floor(W * 0.085)));
+  const tableH = tableW;
+  const tableBaseX = Math.max(W * 0.52, W - (3 * tableW + 80));
+  const tableY = passY + 20;
+  const tableGap = Math.min(22, Math.max(12, Math.floor((W - tableBaseX - 3 * tableW - 30) / 2)));
 
-  c.font = 'bold 6px monospace';
-  c.fillStyle = PALETTE.warmInk;
-  c.fillText('DINING ROOM (TABLE POOL · 3 TABLES)', tableBaseX, tableY);
+  // Section Header Ribbon
+  const diningAreaW = (3 * tableW + 2 * tableGap) + 24;
+  drawPillBadge(c, '🍽️ DINING ROOM (TABLE POOL · 3 TABLES)', tableBaseX + diningAreaW / 2, tableY + 4, {
+    bg: '#263A34',
+    color: '#F3E4BD',
+    border: '#C48A56',
+    center: true,
+    font: 'bold 11px system-ui, sans-serif'
+  });
 
   tableSlots.forEach((owner, i) => {
-    const tx = tableBaseX + (i * 54);
-    const ty = tableY + 6;
+    const tx = tableBaseX + i * (tableW + tableGap) + 12;
+    const ty = tableY + 20;
 
     if (owner) {
-      // Occupied: draw customer diner enjoying dinner + table with hearty meal!
+      // Occupied Table: seated customer enjoying meal
       if (SPRITES.diner.complete && SPRITES.diner.naturalWidth > 0) {
-        c.drawImage(SPRITES.diner, tx + 8, ty - 10, 36, 36);
+        c.drawImage(SPRITES.diner, tx + 6, ty - 12, tableW * 0.8, tableH * 0.8);
       }
       if (SPRITES.tableMeal.complete && SPRITES.tableMeal.naturalWidth > 0) {
-        c.drawImage(SPRITES.tableMeal, tx, ty + 2, 48, 48);
+        c.drawImage(SPRITES.tableMeal, tx, ty, tableW, tableH);
       }
-      // Order tag
-      c.fillStyle = PALETTE.hearthGold;
-      c.fillRect(tx + 8, ty + 42, 32, 8);
-      c.fillStyle = PALETTE.warmInk;
-      c.fillText(`T${i+1}: ${owner}`, tx + 10, ty + 48);
+      // Table Badge: Occupied
+      drawPillBadge(c, `T${i + 1}: ${owner} [SERVED]`, tx + tableW / 2, ty + tableH + 8, {
+        bg: '#F0C768',
+        color: '#263A34',
+        border: '#B95743',
+        borderWidth: 2,
+        center: true,
+        font: 'bold 11px monospace'
+      });
     } else {
-      // Empty table
+      // Empty Table
       if (SPRITES.tableEmpty.complete && SPRITES.tableEmpty.naturalWidth > 0) {
-        c.drawImage(SPRITES.tableEmpty, tx, ty + 2, 48, 48);
+        c.drawImage(SPRITES.tableEmpty, tx, ty, tableW, tableH);
       }
-      c.fillStyle = PALETTE.warmInk;
-      c.fillRect(tx + 10, ty + 42, 28, 7);
-      c.fillStyle = PALETTE.linen;
-      c.fillText(`T${i+1} OPEN`, tx + 12, ty + 48);
+      // Table Badge: Open
+      drawPillBadge(c, `TABLE ${i + 1} [OPEN]`, tx + tableW / 2, ty + tableH + 8, {
+        bg: '#3B3731',
+        color: '#F3E4BD',
+        center: true,
+        font: 'bold 10px monospace'
+      });
     }
   });
 
-  // 8. RESTAURANT ENTRANCE & MEMORY QUEUE (top right)
-  const doorX = W - 32;
-  const doorY = 32;
+  // 8. ENTRANCE & QUEUE (Top Right)
+  const doorW = 32, doorH = 54;
+  const doorX = W - doorW - 16;
+  const doorY = wallH + 4;
+
   c.fillStyle = '#684638';
-  c.fillRect(doorX, doorY, 26, 46);
+  c.fillRect(doorX, doorY, doorW, doorH);
   c.fillStyle = '#956448';
-  c.fillRect(doorX + 2, doorY + 2, 22, 42);
+  c.fillRect(doorX + 2, doorY + 2, doorW - 4, doorH - 4);
   c.fillStyle = PALETTE.hearthGold;
-  c.fillRect(doorX + 20, doorY + 22, 3, 3); // Knob
+  c.fillRect(doorX + doorW - 8, doorY + doorH * 0.5, 4, 4);
 
-  // Welcome mat
-  c.fillStyle = PALETTE.warmInk;
-  c.fillRect(doorX - 2, doorY + 44, 28, 6);
-  c.fillStyle = PALETTE.linen;
-  c.font = '5px monospace';
-  c.fillText('DOOR', doorX + 4, doorY + 48);
+  // Entrance Header
+  drawPillBadge(c, '🚪 ENTRANCE', doorX + doorW / 2, doorY - 8, {
+    bg: '#263A34',
+    color: '#F3E4BD',
+    center: true,
+    font: 'bold 10px monospace'
+  });
 
-  // Queue of customers waiting for memory admission (outside door)
+  // Memory Queue Badge
   const memQueue = (f.queues && f.queues.memory) ? f.queues.memory : [];
   if (memQueue.length > 0) {
-    c.font = 'bold 5px monospace';
-    c.fillStyle = PALETTE.tomato;
-    c.fillText(`QUEUE (${memQueue.length})`, doorX - 34, doorY + 6);
-
-    memQueue.slice(0, 3).forEach((id, qIdx) => {
-      const qx = doorX - 16 - (qIdx * 14);
-      const qy = doorY + 12;
-      if (SPRITES.diner.complete && SPRITES.diner.naturalWidth > 0) {
-        c.drawImage(SPRITES.diner, qx, qy, 18, 18);
-      }
-      c.fillStyle = PALETTE.warmInk;
-      c.fillRect(qx, qy + 16, 14, 5);
-      c.fillStyle = PALETTE.linen;
-      c.fillText(id, qx + 1, qy + 20);
+    drawPillBadge(c, `WAITING ADMISSION: ${memQueue.join(', ')}`, doorX - 60, doorY + 24, {
+      bg: '#B95743',
+      color: '#FFFFFF',
+      border: '#F0C768',
+      center: true,
+      font: 'bold 11px system-ui, monospace'
     });
   }
 
-  // 9. BOTTOM EVENT STATUS TICKER STRIP
+  // 9. BOTTOM EVENT STATUS TICKER STRIP (Crisp High-Contrast HUD Bar)
+  const stripH = 26;
   c.fillStyle = PALETTE.nightPine;
-  c.fillRect(0, H - 12, W, 12);
-  c.fillStyle = PALETTE.linen;
-  c.font = 'bold 7px monospace';
+  c.fillRect(0, H - stripH, W, stripH);
+  c.fillStyle = PALETTE.hearthGold;
+  c.fillRect(0, H - stripH, W, 2); // Gold top border
 
   const ev = (f.events && f.events.length) ? f.events[f.events.length - 1] : null;
-  const evText = ev ? `TICK ${f.time} · [${ev.process_id || 'RESTAURANT'}] ${NAMES[ev.type] || ev.type}${ev.resource ? ' (' + ev.resource + ')' : ''}` : `TICK ${f.time} · SERVICE RUNNING`;
-  c.fillText(evText, 8, H - 3);
+  const evText = ev ? `[${ev.process_id || 'DINER'}] ${NAMES[ev.type] || ev.type}${ev.resource ? ' (' + ev.resource + ')' : ''}` : 'RESTAURANT SERVICE ACTIVE';
+
+  c.font = 'bold 12px system-ui, -apple-system, monospace';
+  c.fillStyle = '#F3E4BD';
+  c.textAlign = 'left';
+  c.textBaseline = 'middle';
+  c.fillText(`⏱ TICK ${f.time}  │  ${evText}`, 16, H - stripH / 2);
+
+  const activeOrdersCount = f.processes.filter(p => p.state === 'RUNNING' || p.state === 'READY' || p.state === 'BLOCKED_RESOURCE').length;
+  c.textAlign = 'right';
+  c.fillStyle = '#A4B47A';
+  c.fillText(`ACTIVE ORDERS: ${activeOrdersCount} / ${f.processes.length}`, W - 16, H - stripH / 2);
+
+  c.restore();
 }
 
-function drawChefTag(c, x, y, title, orderId, p, animTick) {
-  c.font = 'bold 6px monospace';
+function drawChefHUD(c, x, y, w, h, title, orderId, p, animTick) {
+  // Top Title Badge
+  drawPillBadge(c, title, x + w / 2, y - 8, {
+    bg: '#263A34',
+    color: '#F3E4BD',
+    border: '#587A78',
+    center: true,
+    font: 'bold 11px system-ui, monospace',
+    padX: 6,
+    padY: 2
+  });
+
+  const badgeY = y + h + 10;
 
   if (!orderId) {
-    // Idle chef
-    c.fillStyle = PALETTE.warmInk;
-    c.fillRect(x + 2, y + 42, 40, 7);
-    c.fillStyle = PALETTE.linen;
-    c.fillText(`${title}: IDLE`, x + 4, y + 48);
+    // Idle
+    drawPillBadge(c, '● IDLE', x + w / 2, badgeY, {
+      bg: '#1C3A2E',
+      color: '#81B58B',
+      border: '#39775E',
+      center: true,
+      font: 'bold 11px system-ui, monospace'
+    });
   } else if (p && p.state === 'BLOCKED_RESOURCE') {
     // Blocked on equipment
-    c.fillStyle = '#B95743';
-    c.fillRect(x - 2, y + 42, 48, 8);
-    c.fillStyle = '#FFFFFF';
-    c.fillText(`⏳ ${orderId} WAIT`, x, y + 48);
-
-    // Thought bubble
-    c.fillStyle = PALETTE.linen;
-    c.fillRect(x + 36, y + 2, 18, 10);
-    c.fillStyle = PALETTE.warmInk;
-    c.fillText(p.waits_for ? p.waits_for.slice(0, 4) : 'GEAR', x + 38, y + 9);
+    drawPillBadge(c, `⏳ WAITING: ${p.waits_for || 'EQUIPMENT'}`, x + w / 2, badgeY, {
+      bg: '#B95743',
+      color: '#FFFFFF',
+      border: '#F0C768',
+      borderWidth: 2,
+      center: true,
+      font: 'bold 11px system-ui, monospace'
+    });
   } else {
     // Actively cooking
-    c.fillStyle = PALETTE.sage;
-    c.fillRect(x - 4, y + 42, 52, 8);
-    c.fillStyle = PALETTE.linen;
-    c.fillText(`${title}: ${orderId}`, x - 2, y + 48);
+    const cooked = p ? p.executed_service : 0;
+    const remaining = p ? p.remaining_service : 0;
+    const total = cooked + remaining;
+    const progText = total > 0 ? ` (${cooked}/${total})` : '';
 
-    // Steam particles rising from pan
-    const sx = x + 34 + (animTick % 3);
-    const sy = y + 18 - ((animTick % 4) * 3);
-    c.fillStyle = 'rgba(243, 228, 189, 0.85)';
-    c.fillRect(sx, sy, 3, 3);
-    c.fillRect(sx + 3, sy - 4, 2, 2);
+    drawPillBadge(c, `🍳 COOKING: ${orderId}${progText}`, x + w / 2, badgeY, {
+      bg: '#758B63',
+      color: '#FFFFFF',
+      border: '#F0C768',
+      borderWidth: 1.5,
+      center: true,
+      font: 'bold 11px system-ui, monospace'
+    });
+
+    // Cooking steam puffs rising from pan
+    const sx = x + w * 0.75 + (animTick % 3) * 3;
+    const sy = y + 16 - ((animTick % 4) * 4);
+    c.fillStyle = 'rgba(243, 228, 189, 0.9)';
+    c.fillRect(sx, sy, 4, 4);
+    c.fillRect(sx + 3, sy - 5, 3, 3);
   }
 }
+
+// -----------------------------------------------------------------------------
+// Fullscreen Control
+// -----------------------------------------------------------------------------
+function toggleFullscreen() {
+  const scene = $('restaurant-scene');
+  const overlay = $('fullscreen-overlay');
+  const btn = $('btn-fullscreen');
+  if (!scene) return;
+
+  const isFs = document.fullscreenElement || document.webkitFullscreenElement || scene.classList.contains('is-fullscreen');
+
+  if (isFs) {
+    if (document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }
+    scene.classList.remove('is-fullscreen');
+    if (overlay) overlay.classList.add('hidden');
+    if (btn) btn.textContent = '⛶ Fullscreen';
+  } else {
+    if (scene.requestFullscreen) {
+      scene.requestFullscreen().catch(() => {
+        // Fallback for sandboxed environments
+        scene.classList.add('is-fullscreen');
+      });
+    } else if (scene.webkitRequestFullscreen) {
+      scene.webkitRequestFullscreen();
+    } else {
+      scene.classList.add('is-fullscreen');
+    }
+    if (overlay) overlay.classList.remove('hidden');
+    if (btn) btn.textContent = '✕ Exit Fullscreen';
+  }
+
+  setTimeout(() => render(), 150);
+}
+
+document.addEventListener('fullscreenchange', () => {
+  const scene = $('restaurant-scene');
+  const overlay = $('fullscreen-overlay');
+  const btn = $('btn-fullscreen');
+  const isFs = !!document.fullscreenElement;
+
+  if (scene) scene.classList.toggle('is-fullscreen', isFs);
+  if (overlay) overlay.classList.toggle('hidden', !isFs);
+  if (btn) btn.textContent = isFs ? '✕ Exit Fullscreen' : '⛶ Fullscreen';
+
+  render();
+});
+
 
 // -----------------------------------------------------------------------------
 // Initialization & Event Wiring
@@ -1159,6 +1174,16 @@ function init() {
   // Buttons
   $('btn-start-sim')?.addEventListener('click', triggerStartSimulation);
   $('btn-ws-reconnect')?.addEventListener('click', connectWebSocket);
+
+  $('btn-fullscreen')?.addEventListener('click', toggleFullscreen);
+  $('btn-exit-fullscreen')?.addEventListener('click', toggleFullscreen);
+
+  // Fullscreen HUD Buttons
+  $('fs-play-btn')?.addEventListener('click', play);
+  $('fs-step-btn')?.addEventListener('click', stepForward);
+  $('fs-step-back-btn')?.addEventListener('click', stepBackward);
+  $('fs-restart-btn')?.addEventListener('click', () => seek(0));
+  $('fs-speed-btn')?.addEventListener('click', changeSpeed);
 
   $('load-more')?.addEventListener('click', showCases);
   $('close-modal')?.addEventListener('click', () => $('case-modal')?.classList.add('hidden'));

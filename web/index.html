@@ -78,9 +78,33 @@
         </div>
       </div>
       <div class="sim-grid">
-        <section class="scene-card card">
-          <div class="card-heading"><div><span class="eyebrow">THE FLOOR</span><h2>Kitchen cam</h2></div><span id="time-chip" class="time-chip">TICK 0</span></div>
-          <div class="restaurant-scene"><canvas id="game-canvas" aria-label="Pixel-art top-down restaurant. Order names and states are also listed below."></canvas></div>
+        <section class="scene-card card" id="scene-card">
+          <div class="card-heading">
+            <div><span class="eyebrow">THE FLOOR</span><h2>Kitchen cam</h2></div>
+            <div class="card-actions">
+              <button id="btn-fullscreen" class="fullscreen-btn" title="Toggle Fullscreen View">⛶ Fullscreen</button>
+              <span id="time-chip" class="time-chip">TICK 0</span>
+            </div>
+          </div>
+          <div class="restaurant-scene" id="restaurant-scene">
+            <canvas id="game-canvas" aria-label="Pixel-art top-down restaurant. Order names and states are also listed below."></canvas>
+            <div id="fullscreen-overlay" class="fullscreen-overlay hidden">
+              <div class="fs-topbar">
+                <div class="fs-info">
+                  <span id="fs-time-chip" class="time-chip">TICK 0</span>
+                  <span id="fs-run-meta" class="fs-meta"></span>
+                </div>
+                <div class="fs-controls">
+                  <button id="fs-restart-btn" class="control-button" title="Restart">↺</button>
+                  <button id="fs-step-back-btn" class="control-button" title="Step Back">←</button>
+                  <button id="fs-play-btn" class="play-button" title="Play/Pause">▶</button>
+                  <button id="fs-step-btn" class="control-button" title="Step Forward">→</button>
+                  <button id="fs-speed-btn" class="speed-button" title="Speed">1×</button>
+                </div>
+                <button id="btn-exit-fullscreen" class="exit-fullscreen-btn" title="Exit Fullscreen (Esc)">✕ Exit Fullscreen</button>
+              </div>
+            </div>
+          </div>
           <div class="legend"><span><i class="dot dot-cooking"></i>Cooking</span><span><i class="dot dot-ready"></i>Ready</span><span><i class="dot dot-waiting"></i>Waiting</span><span><i class="dot dot-done"></i>Served</span></div>
         </section>
 
