@@ -14,10 +14,21 @@ Orders are processes, 2 chefs are the service units. Algorithms: FCFS, PRIORITY 
 | `metrics.c` | Metrics and output |
 | `gantt.c`, `gantt.h` | Text Gantt chart rendering, shared by `restaurant` and `gantt_chart` |
 | `gantt_chart.c` | Gantt chart generator comparing all three algorithms |
+| `input_parser.c`, `input_parser.h` | A2 seven-field input parser with validation |
+| `cli_args.c`, `cli_args.h` | A2 command-line arguments (scheduler, allocator, phase, trace) |
+| `first_fit.c`, `first_fit.h` | First Fit contiguous allocation |
+| `csv_writer.c`, `csv_writer.h` | Standardized A2 result file (and the final-project format) |
+| `shared_types.h` | Shared A2 data types: workload, configuration, results *(provisional)* |
+| `a2_simulator.h` | A2 simulation entry point `simulate_a2()` *(provisional)* |
+| `a2_sim_stub.c` | **Temporary** placeholder until the A2 simulator is merged |
+| `check_input.c` | Validates an A2 input file without running the simulator |
 | `tests/edge/` | Edge-case inputs, expected rows and `check_rows.sh` |
 | `tests/comparison.txt` | 10-order workload used for the [algorithm comparison](#algorithm-comparison) |
 | `tests/gantt_chart_test.sh` | Checks the Gantt chart generator |
-
+| `tests/a2/` | A2 unit tests, valid/invalid inputs, `comparison_a2.txt`, `allocator_difference.txt` |
+| `scripts/run_comparison.sh` | Runs all 9 scheduler × allocator combinations and prints a table |
+| `docs/input-output.md` | Detailed A2 input/output notes |
+| `HANDOFF.md` | Integration notes for the team |
 ## Compile
 
 ```
@@ -43,6 +54,152 @@ sh tests/gantt_chart_test.sh    # Gantt chart generator checks
 ./gantt_chart tests/edge/starvation.txt  # Gantt chart for a single input file
 ```
 
+### A2 (memory management)
+ 
+```
+./restaurant INPUT_FILE SCHEDULER ALLOCATOR OUTPUT_FILE [--phase a2|a3] [--trace FILE]
+./restaurant tests/a2/comparison_a2.txt FCFS FIRST_FIT result.csv
+```
+ 
+| Argument | Values |
+|---|---|
+| `SCHEDULER` | `FCFS`, `PRIORITY`, `SJF` (not case-sensitive) |
+| `ALLOCATOR` | `FIRST_FIT`, `BEST_FIT`, `WORST_FIT` (not case-sensitive) |
+| `--phase` | Optional; `a2` by default |
+| `--trace FILE` | Optional JSON recording for the browser viewer *(not available yet)* |
+ 
+Exit codes: `0` success, `1` bad arguments, `2` invalid input, `3` simulation failed, `4` result file could not be written. Errors go to the terminal, never into the result file.
+ 
+### A1 (unchanged)
+ 
+```
+./restaurant INPUT_FILE ALGORITHM
+```
+ 
+`ALGORITHM` is one of `FCFS`, `PRIORITY`, `SJF`. This form keeps the A1 behaviour, so the A1 tests and `gantt_chart` work as before. Its output was checked byte-for-byte against the A1 build on `tests/comparison.txt` for all three algorithms.
+ 
+```
+./restaurant tests/edge/all_same_time.txt FCFS
+sh tests/edge/check_rows.sh     # every edge case, every algorithm, vs expected rows
+sh tests/gantt_chart_test.sh    # Gantt chart generator checks
+./gantt_chart tests/edge        # text Gantt charts, one block per input (all algorithms)
+```
+ 
+## A2 input format
+ 
+```
+N
+Q
+ID,ARRIVAL,PRIORITY,SERVICE,CATEGORY,SPACE_REQ,TABLE_REQ
+... exactly N rows ...
+```
+ 
+Example:
+ 
+```
+4
+2
+O1,0,2,8,NORMAL,2,1
+O2,1,1,4,VIP,1,1
+O3,2,2,5,NORMAL,3,0
+O4,3,1,6,VIP,2,2
+```
+ 
+`input_parser.c` checks every rule in the A2 specification. At the first problem it stops with a message and a line number, for example `Input error (line 4): SPACE_REQ must be between 1 and 6, got 9`.
+ 
+- N and Q are positive integers. Q is read but unused, because the Restaurant schedulers have no Round Robin.
+- There are exactly N rows, each with exactly 7 fields.
+- IDs are unique, nonempty and contain no whitespace.
+- ARRIVAL ≥ 0, and PRIORITY and SERVICE ≥ 1. All three must be whole numbers.
+- CATEGORY is nonempty. It is a label only; priority comes from PRIORITY.
+- 1 ≤ SPACE_REQ ≤ 6 and 0 ≤ TABLE_REQ ≤ 3, so no request can exceed a pool.
+- Rows may appear in any order. Blank lines at the end and Windows line endings are accepted. Any other content after the N rows is an error.
+`tests/a2/inputs/invalid/` holds 20 files, one for each kind of mistake. `tests/a2/inputs/valid/` holds 5 accepted files. To check a file without running the simulation:
+ 
+```
+./check_input tests/a2/comparison_a2.txt
+```
+ 
+## A2 output format
+ 
+A comma-separated text file with no header row and no debug text:
+ 
+1. `PROCESS,ID,ARRIVAL,PRIORITY,SERVICE,START,COMPLETION,WAITING,TURNAROUND,RESPONSE,MEM_ADMIT,MEM_WAIT,READY_WAIT`, one row per order, sorted by ID as text, so `O1, O10, O2`.
+2. Eight `SUMMARY` rows, in this order: `AVERAGE_WAITING`, `AVERAGE_TURNAROUND`, `AVERAGE_RESPONSE`, `THROUGHPUT`, `SERVICE_UTILIZATION_PCT`, `AVERAGE_MEMORY_WAIT`, `COMPLETED_COUNT`, `BLOCKED_FOR_MEMORY_COUNT`.
+3. `POOL,SPACE,6,PEAK_OCCUPIED,UTILIZATION_PCT,MAX_EXT_FRAG_SLOTS`, then `POOL,TABLE,3,...`.
+Times and counts are integers. Decimal statistics are printed with up to 6 decimal places, within the required 10⁻³ accuracy. The file is written to `OUTPUT_FILE.tmp` and renamed only after a complete, successful run, so a failed run never leaves a result file that looks valid.
+ 
+Expected result for a single order `O1,0,2,2,NORMAL,2,1`:
+ 
+```
+PROCESS,O1,0,2,2,0,2,0,2,0,0,0,0
+SUMMARY,AVERAGE_WAITING,0
+SUMMARY,AVERAGE_TURNAROUND,2
+SUMMARY,AVERAGE_RESPONSE,0
+SUMMARY,THROUGHPUT,0.5
+SUMMARY,SERVICE_UTILIZATION_PCT,50
+SUMMARY,AVERAGE_MEMORY_WAIT,0
+SUMMARY,COMPLETED_COUNT,1
+SUMMARY,BLOCKED_FOR_MEMORY_COUNT,0
+POOL,SPACE,6,2,33.333333,0
+POOL,TABLE,3,1,33.333333,0
+```
+ 
+### A2 metrics
+ 
+For arrival A, memory admission M, first start S, completion C and service B:
+ 
+| Metric | Formula |
+|---|---|
+| Turnaround | C − A |
+| Response | S − A |
+| Waiting | C − A − B |
+| Memory waiting | M − A |
+| Ready waiting | Waiting − Memory waiting |
+ 
+With E = last completion − first arrival: throughput = N / E, and chef utilization = Σ service / (2E) × 100. Pool utilization = occupied slot-time / (capacity × E) × 100. External fragmentation at a moment = free slots − largest contiguous free run; the reported value is the maximum over the run.
+ 
+## Memory allocation
+ 
+### First Fit
+ 
+`first_fit(slots, capacity, size)` scans the pool from slot 0 upwards and returns the start of the **first** run of `size` adjacent free slots, or −1 if there is none. The same function serves both SPACE (capacity 6) and TABLE (capacity 3). It only searches and never changes the pool. Admission checks both pools first and allocates only if both requests fit.
+ 
+- **Advantage:** the fastest of the three, because it stops at the first hole that fits.
+- **Trade-off:** small leftover holes build up near the start of the pool and increase external fragmentation.
+- **Ties:** none are possible, because the lowest address always wins.
+Example: in the pool `[X _ X _ _ X]`, a request for 2 slots skips the 1-slot hole at slot 1 and returns slot 3.
+ 
+### Best Fit and Worst Fit
+ 
+*To be added with the A2 simulator.*
+ 
+## A2 algorithm comparison
+ 
+`tests/a2/comparison_a2.txt` is the A1 comparison workload (the same 10 orders as `tests/comparison.txt`) with SPACE and TABLE requests added, so the A2 results can be compared directly with the A1 table below. `tests/a2/allocator_difference.txt` is a small input where the allocator choice changes memory waiting.
+ 
+```
+sh scripts/run_comparison.sh tests/a2/comparison_a2.txt > results/comparison.md
+```
+ 
+The script runs all 9 combinations (3 schedulers × 3 allocators) and keeps each CSV in `results/comparison/`. It then prints a table of average waiting, turnaround, response and memory wait, the blocked-for-memory count, SPACE and TABLE peak/utilization/fragmentation, and completion order.
+ 
+*Results table and discussion (First/Best/Worst Fit trade-offs, FIFO admission and head-of-line blocking, how memory changes the A1 results) to be added once the A2 simulator is merged.*
+ 
+## Testing
+ 
+```
+make test-a2
+```
+ 
+| Test | Checks |
+|---|---|
+| `tests/a2/test_first_fit.c` | Empty and full pools, exact fit, size 1 and full capacity, holes, equal-sized holes, the TABLE pool |
+| `tests/a2/test_parser.c` | Spec example values, parsing stops at the A3 resource section, trailing content, error line numbers |
+| `tests/a2/test_csv.c` | Exact one-order output, lexicographic ID sorting, final-project format, no output for an incomplete run |
+| `tests/a2/test_cli.c` | All scheduler/allocator names, options in any position, bad arguments, the A1 two-argument form |
+| `tests/a2/test_inputs.sh` | Every valid input is accepted; every invalid input is rejected with a message |
+#A1: Process Management
 ## Input format (parser)
 
 ```
