@@ -426,7 +426,7 @@ Best Fit admits B2 at once. Its total waiting stays 9, because both chefs are bu
 - Event order inside one virtual instant depends on the OS thread schedule, so contended runs are not byte-for-byte reproducible. Resource-free runs are.
 - One thread per order with actions. Thousands of such orders would create thousands of threads. A fixed worker pool would scale better but would hide the "order is blocked" relationship.
 - Detection of deadlock in unsafe mode stops the run. It doesn't recover by choosing a victim.
-- The browser viewer (`server/`) still accepts only A2 orders.
+- The live server (`server/`) accepts at most 200 orders and 2000 actions per run, because every frame repeats every order.
 
 ## Optional features included
 
