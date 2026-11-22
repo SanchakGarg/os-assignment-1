@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="400" viewBox="0 0 960 400" shape-rendering="crispEdges">
+  <rect width="960" height="400" fill="#f5eedf"/>
+  <text x="32" y="46" fill="#263a34" font-family="monospace" font-size="24" font-weight="bold">LAST CALL KITCHEN · SHARED 12-COLOR PALETTE</text>
+  <text x="32" y="76" fill="#684638" font-family="monospace" font-size="14">Upper-left warm light · elevated three-quarter view · selective 1px outlines</text>
+  <g font-family="monospace" font-size="14">
+    <g transform="translate(32 108)"><rect width="138" height="174" fill="#263A34"/><text x="10" y="132" fill="#F3E4BD">Night Pine</text><text x="10" y="155" fill="#F3E4BD">#263A34</text><text x="10" y="18" fill="#F3E4BD">01</text></g>
+    <g transform="translate(181 108)"><rect width="138" height="174" fill="#3B3731"/><text x="10" y="132" fill="#F3E4BD">Warm Ink</text><text x="10" y="155" fill="#F3E4BD">#3B3731</text><text x="10" y="18" fill="#F3E4BD">02</text></g>
+    <g transform="translate(330 108)"><rect width="138" height="174" fill="#684638"/><text x="10" y="132" fill="#F3E4BD">Roast Umber</text><text x="10" y="155" fill="#F3E4BD">#684638</text><text x="10" y="18" fill="#F3E4BD">03</text></g>
+    <g transform="translate(479 108)"><rect width="138" height="174" fill="#956448"/><text x="10" y="132" fill="#F3E4BD">Tavern Oak</text><text x="10" y="155" fill="#F3E4BD">#956448</text><text x="10" y="18" fill="#F3E4BD">04</text></g>
+    <g transform="translate(628 108)"><rect width="138" height="174" fill="#C48A56"/><text x="10" y="132" fill="#263A34">Honey Light</text><text x="10" y="155" fill="#263A34">#C48A56</text><text x="10" y="18" fill="#263A34">05</text></g>
+    <g transform="translate(777 108)"><rect width="138" height="174" fill="#E0B477"/><text x="10" y="132" fill="#263A34">Apricot</text><text x="10" y="155" fill="#263A34">#E0B477</text><text x="10" y="18" fill="#263A34">06</text></g>
+    <g transform="translate(32 296)"><rect width="138" height="72" fill="#F3E4BD" stroke="#684638"/><text x="10" y="31" fill="#263A34">Linen</text><text x="10" y="54" fill="#263A34">#F3E4BD</text></g>
+    <g transform="translate(181 296)"><rect width="138" height="72" fill="#758B63"/><text x="10" y="31" fill="#F3E4BD">Sage</text><text x="10" y="54" fill="#F3E4BD">#758B63</text></g>
+    <g transform="translate(330 296)"><rect width="138" height="72" fill="#A4B47A"/><text x="10" y="31" fill="#263A34">Leaf</text><text x="10" y="54" fill="#263A34">#A4B47A</text></g>
+    <g transform="translate(479 296)"><rect width="138" height="72" fill="#587A78"/><text x="10" y="31" fill="#F3E4BD">Teal Slate</text><text x="10" y="54" fill="#F3E4BD">#587A78</text></g>
+    <g transform="translate(628 296)"><rect width="138" height="72" fill="#B95743"/><text x="10" y="31" fill="#F3E4BD">Tomato</text><text x="10" y="54" fill="#F3E4BD">#B95743</text></g>
+    <g transform="translate(777 296)"><rect width="138" height="72" fill="#F0C768"/><text x="10" y="31" fill="#263A34">Hearth Gold</text><text x="10" y="54" fill="#263A34">#F0C768</text></g>
+  </g>
+</svg>

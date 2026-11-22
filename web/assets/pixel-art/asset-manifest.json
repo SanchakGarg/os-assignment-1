@@ -1,0 +1,106 @@
+{
+  "style": "last-call-kitchen-v1",
+  "logicalCanvas": [
+    64,
+    64
+  ],
+  "anchor": {
+    "type": "bottom-center",
+    "pixel": [
+      32,
+      60
+    ]
+  },
+  "camera": "elevated three-quarter, front-facing with visible top planes",
+  "light": "upper-left warm light, hard compact shadow down-right",
+  "palette": "palette.svg",
+  "assets": [
+    {
+      "id": "chef_cook_01",
+      "filename": "chef-cook-01.png",
+      "subject": "Original cheerful restaurant chef, front-facing, stirring a pan; cream toque, sage jacket, tomato apron",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        17,
+        4,
+        43,
+        60
+      ],
+      "facing": "front, slight three-quarter turn",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Honey Light",
+        "Apricot",
+        "Linen",
+        "Sage",
+        "Tomato",
+        "Hearth Gold"
+      ],
+      "transparency": "required",
+      "animation": "single idle/action pose anchor; future frames reuse canvas and pivot",
+      "tiling": "none"
+    },
+    {
+      "id": "range_woodfire_01",
+      "filename": "range-woodfire-01.png",
+      "subject": "Compact old-fashioned restaurant wood-fired range with dark iron body, visible cooktop and warm lit oven",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        8,
+        4,
+        56,
+        62
+      ],
+      "facing": "front with visible top plane",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Roast Umber",
+        "Tavern Oak",
+        "Teal Slate",
+        "Linen",
+        "Hearth Gold"
+      ],
+      "transparency": "required",
+      "animation": "static style anchor; flame/steam can be separate future animation layers",
+      "tiling": "none"
+    },
+    {
+      "id": "table_meal_01",
+      "filename": "table-meal-01.png",
+      "subject": "Small square oak dining table, elevated view of top and front edge, one ceramic plate with colorful hearty meal",
+      "canvas": [
+        64,
+        64
+      ],
+      "occupiedBoundsApprox": [
+        11,
+        16,
+        53,
+        61
+      ],
+      "facing": "front with visible top plane",
+      "paletteSubset": [
+        "Night Pine",
+        "Warm Ink",
+        "Roast Umber",
+        "Tavern Oak",
+        "Honey Light",
+        "Linen",
+        "Leaf",
+        "Tomato",
+        "Hearth Gold"
+      ],
+      "transparency": "required",
+      "animation": "static style anchor",
+      "tiling": "none"
+    }
+  ]
+}

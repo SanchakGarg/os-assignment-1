@@ -4,15 +4,15 @@ Orders are processes, 2 chefs are the service units. Algorithms: FCFS, PRIORITY 
 
 ## Structure
 
-| File | Purpose |
-|---|---|
-| `restaurant.h` | `Process` struct, shared prototypes |
-| `main.c` | CLI, picks algorithm |
-| `input.c` | Input parser |
-| `sim.c` | Event-driven simulation, 2 chefs |
-| `sched.c` | **Algorithm placeholders (`pick_fcfs`, `pick_priority`, `pick_sjf`) – write code here** |
-| `metrics.c` | Metrics and output |
-| `tests/` | Sample inputs and `run_all.sh` |
+| File           | Purpose                                                                                 |
+| -------------- | --------------------------------------------------------------------------------------- |
+| `restaurant.h` | `Process` struct, shared prototypes                                                     |
+| `main.c`       | CLI, picks algorithm                                                                    |
+| `input.c`      | Input parser                                                                            |
+| `sim.c`        | Event-driven simulation, 2 chefs                                                        |
+| `sched.c`      | **Algorithm placeholders (`pick_fcfs`, `pick_priority`, `pick_sjf`) – write code here** |
+| `metrics.c`    | Metrics and output                                                                      |
+| `tests/`       | Sample inputs and `run_all.sh`                                                          |
 
 A `pick_*` function returns the index of the READY process to run next, or `-1` if none.
 
