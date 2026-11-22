@@ -21,6 +21,14 @@ static int chef_end[CHEFS];     /* time each chef finishes its order */
 static int *queue;              /* memory queue: arrived orders waiting for slots, FIFO */
 static int q_head, q_len;
 
+static SimEvent *events;        /* what happened at the current time, for on_step */
+static int event_count;
+
+static void record(EventType type, int order, int chef)
+{
+    events[event_count++] = (SimEvent){ type, order, chef };
+}
+
 static int finish_orders(Process *p, int t, Memory *mem)
 {
     int finished = 0;
@@ -31,6 +39,7 @@ static int finish_orders(Process *p, int t, Memory *mem)
         o->completion = t;
         pool_release(&mem->space, o->space_at, o->space_req);
         pool_release(&mem->table, o->table_at, o->table_req);
+        record(EV_COMPLETE, chef_order[c], c);
         chef_order[c] = -1;
         finished++;
     }
@@ -44,6 +53,7 @@ static void queue_arrivals(Process *p, int n, int t)
     for (int i = 0; i < n; i++) {
         if (p[i].state != NEW || p[i].arrival > t) continue;
         p[i].state = BLOCKED_MEMORY;
+        record(EV_ARRIVE, i, -1);
         int j = q_len++;
         while (j > first && strcmp(p[queue[j - 1]].id, p[i].id) > 0) {
             queue[j] = queue[j - 1];
@@ -71,10 +81,13 @@ static int try_admit(Process *o, Memory *mem, Placer place)
 static void admit_from_queue(Process *p, int t, Memory *mem, Placer place)
 {
     while (q_head < q_len && try_admit(&p[queue[q_head]], mem, place)) {
-        Process *o = &p[queue[q_head++]];
+        Process *o = &p[queue[q_head]];
         o->state = READY;
         o->mem_admit = t;
+        record(EV_MEMORY_ADMIT, queue[q_head++], -1);
     }
+    for (int k = q_head; k < q_len; k++)          /* arrived now but did not fit */
+        if (p[queue[k]].arrival == t) record(EV_MEMORY_BLOCK, queue[k], -1);
 }
 
 static void assign_chefs(Process *p, int n, int t, Picker pick)
@@ -87,6 +100,7 @@ static void assign_chefs(Process *p, int n, int t, Picker pick)
         if (p[i].start < 0) p[i].start = t;
         chef_order[c] = i;
         chef_end[c] = t + p[i].remaining;
+        record(EV_DISPATCH, i, c);
     }
 }
 
@@ -109,13 +123,30 @@ static int next_event(Process *p, int n)
     return next;
 }
 
-int simulate(Process *p, int n, Picker pick, Placer place, Memory *mem)
+/* Hands the settled state at time t to the viewer, then starts a new event list. */
+static void report(Process *p, int n, int t, Memory *mem, SnapshotFn on_step, void *ctx)
+{
+    if (on_step && event_count > 0) {
+        Snapshot s = { t, p, n, chef_order, mem, queue + q_head, q_len - q_head,
+                       events, event_count };
+        on_step(&s, ctx);
+    }
+    event_count = 0;
+}
+
+int simulate(Process *p, int n, Picker pick, Placer place, Memory *mem,
+             SnapshotFn on_step, void *ctx)
 {
     int t = 0, done = 0;
 
     queue = malloc((size_t)n * sizeof *queue);
-    if (!queue) return -1;
-    q_head = q_len = 0;
+    events = malloc(((size_t)3 * n + 2 * CHEFS) * sizeof *events);   /* most possible in one tick */
+    if (!queue || !events) {
+        free(queue);
+        free(events);
+        return -1;
+    }
+    q_head = q_len = event_count = 0;
     for (int c = 0; c < CHEFS; c++) chef_order[c] = -1;
 
     while (done < n) {
@@ -125,6 +156,7 @@ int simulate(Process *p, int n, Picker pick, Placer place, Memory *mem)
         assign_chefs(p, n, t, pick);
         measure(&mem->space);
         measure(&mem->table);
+        report(p, n, t, mem, on_step, ctx);
 
         int next = next_event(p, n);
         if (next == INT_MAX) break;   /* nothing left to happen */
@@ -134,7 +166,9 @@ int simulate(Process *p, int n, Picker pick, Placer place, Memory *mem)
     }
 
     free(queue);
+    free(events);
     queue = NULL;
+    events = NULL;
     return done == n ? 0 : -1;
 }
 
@@ -153,6 +187,7 @@ static void load_process(Process *o, const ProcessInput *in)
 }
 
 int simulate_workload(const Workload *input, const SimulationConfig *config,
+                      SnapshotFn on_step, void *ctx,
                       SimulationResult *out, Error *error)
 {
     /* indexed by SchedulerKind / AllocatorKind */
@@ -174,7 +209,8 @@ int simulate_workload(const Workload *input, const SimulationConfig *config,
     pool_init(&mem.space, "SPACE", SPACE_CAPACITY);
     pool_init(&mem.table, "TABLE", TABLE_CAPACITY);
 
-    int status = simulate(p, n, pickers[config->scheduler], placers[config->allocator], &mem);
+    int status = simulate(p, n, pickers[config->scheduler], placers[config->allocator], &mem,
+                          on_step, ctx);
     if (status != 0)
         snprintf(error->message, sizeof error->message,
                  "simulation stopped before every order finished");

@@ -83,7 +83,7 @@ static int run_a1(const char *file, SchedulerKind scheduler)
     pool_init(&mem.space, "SPACE", SPACE_CAPACITY);
     pool_init(&mem.table, "TABLE", TABLE_CAPACITY);
 
-    simulate(p, n, pickers[scheduler], first_fit, &mem);   /* A1 orders need no slots */
+    simulate(p, n, pickers[scheduler], first_fit, &mem, NULL, NULL);   /* A1: no slots */
     /* Only for a terminal: piped/redirected output stays the plain CSV report. */
     int terminal = isatty(STDOUT_FILENO);
     print_results(p, n, terminal, file, algorithm);
@@ -128,7 +128,7 @@ static int run_standard(const CliOptions *opt)
     if (opt->trace_path)
         fprintf(stderr, "Note: --trace is not available yet; no recording written\n");
 
-    status = simulate_workload(&w, &opt->config, &result, &error);
+    status = simulate_workload(&w, &opt->config, NULL, NULL, &result, &error);
     workload_free(&w);
     if (status != 0) {
         print_error("Simulation error", &error);

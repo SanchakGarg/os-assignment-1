@@ -28,16 +28,44 @@ typedef struct {
 
 typedef int (*Picker)(Process *p, int n, int t);
 
+/* What happened at one event time, for live viewers (e.g. the web server). */
+typedef enum { EV_ARRIVE, EV_MEMORY_BLOCK, EV_MEMORY_ADMIT, EV_DISPATCH, EV_COMPLETE } EventType;
+
+typedef struct {
+    EventType type;
+    int order;                        /* index into the Process array */
+    int chef;                         /* chef number, -1 if not about a chef */
+} SimEvent;
+
+/* The whole restaurant after all events at `time`. Pointers are valid only
+ * during the callback: copy what you need before returning. */
+typedef struct {
+    int time;
+    const Process *p;
+    int n;
+    const int *chefs;                 /* CHEFS entries: order index or -1 */
+    const Memory *mem;
+    const int *mem_queue;             /* orders waiting for slots, head first */
+    int mem_queue_len;
+    const SimEvent *events;
+    int event_count;
+} Snapshot;
+
+typedef void (*SnapshotFn)(const Snapshot *s, void *ctx);
+
 /* sched.c: which READY order a free chef cooks next (-1 if none) */
 int pick_fcfs(Process *p, int n, int t);
 int pick_priority(Process *p, int n, int t);
 int pick_sjf(Process *p, int n, int t);
 
-/* sim.c: runs every order to completion. Returns 0, or -1 if it got stuck. */
-int simulate(Process *p, int n, Picker pick, Placer place, Memory *mem);
+/* sim.c: runs every order to completion. Returns 0, or -1 if it got stuck.
+ * If on_step is not NULL it is called once per event time. */
+int simulate(Process *p, int n, Picker pick, Placer place, Memory *mem,
+             SnapshotFn on_step, void *ctx);
 
 /* sim.c: A2 entry point: parsed input + settings -> calculated results */
 int simulate_workload(const Workload *input, const SimulationConfig *config,
+                      SnapshotFn on_step, void *ctx,
                       SimulationResult *out, Error *error);
 void simulation_result_free(SimulationResult *result);
 
