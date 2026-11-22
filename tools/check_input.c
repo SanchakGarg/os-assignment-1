@@ -2,7 +2,7 @@
  * check_input -- validates an A2 input file and prints the parsed orders.
  * Works without the simulator; useful for testing inputs and for the demo.
  *
- *   ./check_input tests/inputs/valid/restaurant_example.txt
+ *   ./check_input tests/a2/inputs/valid/restaurant_example.txt
  */
 #include <stdio.h>
 

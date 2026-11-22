@@ -1,7 +1,7 @@
 #!/bin/sh
 # Every file in tests/a2/inputs/valid must be accepted and every file in
 # tests/a2/inputs/invalid must be rejected with an error message (exit code 2).
-# Run from the project root: sh tests/test_inputs.sh  (or: make test-a2)
+# Run from the project root: sh tests/a2/test_inputs.sh  (or: make test-a2)
 
 CHECK=./check_input
 failures=0
