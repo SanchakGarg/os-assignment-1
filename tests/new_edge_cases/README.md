@@ -1,8 +1,8 @@
 # Edge cases: Smart Restaurant 
 
-These are **12 high-value, valid test inputs** for Sanchak to run against the merged simulator. They do not replace the existing valid/invalid input tests or the existing A3 samples. All input process sections have been accepted by the uploaded seven-field parser. Full simulator behavior is **not yet verified**; treat the expectations below as assertions to check, not results already observed.
 
-## A2 — 6 focused tests
+
+## A2 : tests
 
 | File | Why run it | Expected behavior |
 |---|---|---|
@@ -13,7 +13,7 @@ These are **12 high-value, valid test inputs** for Sanchak to run against the me
 | `07_fragmentation_and_fit.txt` | First/Best/Worst Fit yield different placements | Under FCFS, Best Fit admits B2 at t=3; First Fit and Worst Fit only admit B2 at t=10. Compare `MEM_WAIT` and fragmentation. (A1–A4 creates gaps of 2 and 1 slots.) |
 | `09_simultaneous_completions.txt` | Event ordering at same tick | A/B finish at t=3 and release slots **before** C/D arrivals are considered; C can be admitted at t=3 |
 
-## A3 — 6 focused tests
+## A3 :tests
 
 | File | Why run it | Expected behavior |
 |---|---|---|
@@ -24,7 +24,7 @@ These are **12 high-value, valid test inputs** for Sanchak to run against the me
 | `07_memory_before_resource.txt` | A1/A2/A3 lifecycle integration | C arrives at t=1 requesting 3 SPACE while A/B own all 6; C cannot ACQUIRE OVEN_1 until full memory admission |
 | `08_circular_wait_unsafe_demo.txt` | Deadlock challenge | Unsafe *bounded* demo shows circular wait between MICROWAVE and OVEN_1; normal prevention must complete or explicitly identify an unsatisfiable request, never hang |
 
-## Commands — after simulator merge
+## Commands :after simulator merge
 
 ```sh
 make
