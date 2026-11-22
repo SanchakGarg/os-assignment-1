@@ -42,3 +42,12 @@ done
 Important: Inspect resulting PROCESS, SUMMARY, POOL, RESOURCE and CHECK lines and (for A3) thread/event evidence. The CSV alone does **not** prove actual threaded concurrency; Abhinav must demonstrate real overlapping worker activity.
 
 If the project retains the temporary `a2_sim_stub.c`, A2 runs will intentionally fail and cannot be evaluated. Keep your existing invalid-input tests; these 12 files are intentionally valid behavioral edge cases.
+
+## Final-project edge cases added with the concurrency implementation
+
+| File | Shows |
+|---|---|
+| `tests/a3/edge/10_repeated_acquire.txt` | The same order acquires, releases and acquires `OVEN_1` again; B's requests interleave with A's. `OVEN_1` has 4 acquisitions. |
+| `tests/a3/edge/11_blocked_while_holding.txt` | B holds `MICROWAVE` while blocked on `OVEN_1` (held by A). B gives up its chef and C starts at t=1. B keeps the microwave and its memory the whole time. |
+| `tests/a3/edge/12_same_offset_release_acquire.txt` | At the same offset, A releases `OVEN_1` and acquires `OVEN_2`, while B acquires and releases `OVEN_1`. Rows for one order at one offset run in input order. |
+| `tests/a3/invalid/*.txt` | 17 malformed resource/action sections, each rejected with a line-numbered message (`sh tests/a3/test_inputs.sh`). |

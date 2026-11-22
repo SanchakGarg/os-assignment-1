@@ -1,6 +1,6 @@
 # Final project: sample inputs and checks
 
-*Owner: Anam. Paste into the final README.*
+*Owner: Anam. The README's final-project section builds on this.*
 
 The final input format is the A2 format followed by two optional sections: R equipment rows, then K action rows. An unchanged A2 input is therefore a valid final-project input with no equipment use.
 
@@ -63,7 +63,7 @@ The same trace was reproduced with a small independent reference model. Sanchak'
 | No preemption | Equipment is never taken away from an order | Yes |
 | Circular wait | O1 waits for O2's oven while O2 waits for O1's microwave | Only with opposite orders, as in `deadlock_unsafe.txt` |
 
-Our prevention policy breaks at least one of these. *(Abhinav: add the chosen policy, how it handles `deadlock_unsafe.txt` in normal mode, and its cost.)*
+Our prevention policy breaks **circular wait**: ordered acquisition with rollback. The global rank is `COFFEE_MACHINE < MICROWAVE < OVEN_1 < OVEN_2`, and a worker only waits for a unit ranked above everything it holds. In `deadlock_unsafe.txt` in normal mode, O2 asks for `MICROWAVE` while holding `OVEN_1`. It first gives `OVEN_1` back (`ROLLBACK` in the trace), then waits for `MICROWAVE` and takes both again in rank order. Both orders complete. The cost falls on the out-of-order order, which waits 3 instead of 0. Orders that follow the global order pay nothing. With `--unsafe-demo`, the cycle forms, is detected at t=1 and the run stops with exit code 5. Full details are in the README under "Deadlock".
 
 ## Checks
 
