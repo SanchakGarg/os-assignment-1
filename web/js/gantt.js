@@ -8,7 +8,7 @@
   const G = (RV.Gantt = {});
   let canvas, ctx, rows = [];
   const LABEL_W = 108, ROW_H = 18, TOP = 16;
-  const FONT = '"Press Start 2P", ui-monospace, monospace';
+  const FONT = '"Jersey 10", ui-monospace, monospace';
 
   G.init = function (el) {
     canvas = el;
@@ -44,12 +44,12 @@
     if (!ctx) return;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = "#1f1712";
+    ctx.fillStyle = "#fbfbfb";
     ctx.fillRect(0, 0, w, h);
     ctx.textBaseline = "middle";
     if (!P.run) {
-      ctx.fillStyle = "#8d7b6a";
-      ctx.font = `9px ${FONT}`;
+      ctx.fillStyle = "#686878";
+      ctx.font = `19px ${FONT}`;
       ctx.fillText("Timeline: who uses each chef and machine, cycle by cycle", 12, h / 2);
       return;
     }
@@ -59,17 +59,17 @@
     const now = P.t + Math.min(1, P.phase);
 
     // time axis
-    ctx.font = `8px ${FONT}`;
-    ctx.fillStyle = "#bfae9c";
+    ctx.font = `16px ${FONT}`;
+    ctx.fillStyle = "#686878";
     const every = Math.max(1, Math.ceil(28 / cell));
     for (let u = 0; u <= end; u += every) ctx.fillText(String(u), LABEL_W + u * cell + 2, 8);
 
     rows.forEach((row, k) => {
       const y = TOP + k * rowH;
-      ctx.fillStyle = k % 2 ? "#2a1f18" : "#30241c";
+      ctx.fillStyle = k % 2 ? "#eef1f8" : "#ffffff";
       ctx.fillRect(0, y, w, rowH - 1);
-      ctx.fillStyle = "#f1e3d3";
-      ctx.font = `8px ${FONT}`;
+      ctx.fillStyle = "#303040";
+      ctx.font = `16px ${FONT}`;
       ctx.fillText(row.name, 8, y + rowH / 2);
       // merge consecutive cycles used by the same order
       let u = 0;
@@ -84,7 +84,7 @@
           ctx.fillRect(x0 + 1, y + 2, Math.max(1, x1 - x0 - 2), rowH - 5);
           if (x1 - x0 > 22) {
             ctx.fillStyle = RV.Sprites.ink(col);
-            ctx.font = `${Math.min(9, rowH - 8)}px ${FONT}`;
+            ctx.font = `${Math.min(17, rowH)}px ${FONT}`;
             ctx.fillText(id, x0 + 4, y + rowH / 2);
           }
         }
@@ -94,7 +94,7 @@
 
     // cursor
     const cx = LABEL_W + now * cell;
-    ctx.fillStyle = "#ffd43b";
+    ctx.fillStyle = "#e04848";
     ctx.fillRect(Math.round(cx) - 1, TOP - 4, 2, rows.length * rowH + 4);
   };
 })();

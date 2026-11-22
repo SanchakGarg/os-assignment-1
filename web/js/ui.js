@@ -12,27 +12,66 @@
     onStart: null,
   });
 
-  /* ---------- menu ---------- */
+  /* ---------- menu (option windows with a ▶ cursor) ---------- */
+
+  const PICKS = ["scenario", "scheduler", "allocator", "deadlock"];
+  let activePick = "scenario";
+  const secs = v => `${+v.toFixed(2)} s`;
 
   function setChoice(group, value) {
-    document.querySelectorAll(`.choices[data-group=${group}] button`).forEach(b =>
-      b.classList.toggle("on", b.dataset.value === value));
+    document.querySelectorAll(`.pk-list[data-group=${group}] li`).forEach(li =>
+      li.classList.toggle("on", li.dataset.value === value));
+  }
+
+  function currentValue(group) {
+    const s = U.settings;
+    return group === "scenario" ? s.scenario : group === "deadlock" ? (s.unsafe ? "off" : "on") : s[group];
   }
 
   function applySettingsToMenu() {
-    const s = U.settings;
-    setChoice("scheduler", s.scheduler);
-    setChoice("allocator", s.allocator);
-    setChoice("deadlock", s.unsafe ? "off" : "on");
-    document.querySelectorAll("#scenarioList button").forEach(b => b.classList.toggle("on", b.dataset.key === s.scenario));
-    $("menuSpeed").value = s.speed;
-    $("menuSpeedVal").textContent = `${s.speed.toFixed(2).replace(/0$/, "")} s per cycle`;
+    for (const g of PICKS) setChoice(g, currentValue(g));
+    document.querySelectorAll(".pick").forEach(w => w.classList.toggle("active", w.dataset.pick === activePick));
+    $("menuSpeed").value = U.settings.speed;
+    $("menuSpeedVal").textContent = `${secs(U.settings.speed)} per cycle`;
+  }
+
+  function describe(li) {
+    if (li) $("menuDesc").textContent = li.dataset.desc;
+  }
+
+  function choose(group, value) {
+    if (group === "scenario") return U.selectScenario(value);
+    if (group === "deadlock") U.settings.unsafe = value === "off";
+    else U.settings[group] = value;
+    applySettingsToMenu();
+  }
+
+  /* ↑ ↓ moves the cursor in the active window, ← → switches window. */
+  function menuKey(e) {
+    const k = e.key;
+    if (k === "Enter") { e.preventDefault(); $("btnStart").click(); return; }
+    if (k === "ArrowLeft" || k === "ArrowRight") {
+      e.preventDefault();
+      const i = PICKS.indexOf(activePick) + (k === "ArrowRight" ? 1 : -1);
+      activePick = PICKS[(i + PICKS.length) % PICKS.length];
+      applySettingsToMenu();
+      describe(document.querySelector(`.pk-list[data-group=${activePick}] li.on`));
+      return;
+    }
+    if (k !== "ArrowUp" && k !== "ArrowDown") return;
+    e.preventDefault();
+    const items = [...document.querySelectorAll(`.pk-list[data-group=${activePick}] li`)];
+    const i = items.findIndex(li => li.classList.contains("on"));
+    const next = items[(i + (k === "ArrowDown" ? 1 : -1) + items.length) % items.length];
+    choose(activePick, next.dataset.value);
+    describe(next);
   }
 
   U.selectScenario = function (key, keepSettings) {
     const sc = RV.SCENARIOS.find(s => s.key === key);
     if (!sc) return;
     U.settings.scenario = key;
+    $("menuDesc").textContent = `${sc.title.toUpperCase()} — ${sc.about}`;
     $("ordersText").value = sc.text;
     if (!keepSettings) {
       U.settings.scheduler = sc.suggest.scheduler;
@@ -63,6 +102,7 @@
     const where = err.line ? `Line ${err.line}: ` : "";
     $("inputError").textContent = `${where}${err.message}`;
     $("inputError").hidden = false;
+    $("editorBox").open = true;
     updateLineNumbers(err.line || 0);
     U.openMenu();
   };
@@ -82,31 +122,35 @@
     $("srvDot").className = "dot " + status;
     const h = RV.Net.hello;
     $("srvText").textContent =
-      status === "connected" ? `Connected to the simulator (${h ? h.chefs : 2} chefs, ${h ? h.pools.SPACE : 6} seats, ${h ? h.pools.TABLE : 3} tables)`
+      status === "connected" ? `Connected: ${h ? h.chefs : 2} chefs, ${h ? h.pools.SPACE : 6} chairs, ${h ? h.pools.TABLE : 3} tables`
       : status === "connecting" ? "Connecting to the simulator…"
       : "Server offline. Run: make server && ./restaurant_server";
     $("btnStart").disabled = status !== "connected";
-    $("startNote").textContent = status === "connected" ? "" : "Start the server to run a simulation.";
+    $("startNote").textContent = status === "connected" ? "↑ ↓ choose · ← → switch window · Enter start"
+                                                        : "Start the server to run a simulation.";
   };
 
   function buildMenu() {
     const list = $("scenarioList");
     for (const sc of RV.SCENARIOS) {
-      const b = document.createElement("button");
-      b.dataset.key = sc.key;
-      b.innerHTML = `<b>${esc(sc.title)}</b><span>${esc(sc.about)}</span>`;
-      b.title = sc.source;
-      b.onclick = () => U.selectScenario(sc.key);
-      list.appendChild(b);
+      const li = document.createElement("li");
+      li.dataset.value = sc.key;
+      li.dataset.desc = `${sc.title.toUpperCase()} — ${sc.about} (${sc.source})`;
+      li.textContent = sc.title;
+      list.appendChild(li);
     }
-    document.querySelectorAll(".choices button").forEach(b => {
-      b.onclick = () => {
-        const group = b.parentElement.dataset.group;
-        if (group === "deadlock") U.settings.unsafe = b.dataset.value === "off";
-        else U.settings[group] = b.dataset.value;
-        applySettingsToMenu();
-      };
+    document.querySelectorAll(".pk-list").forEach(ul => {
+      const group = ul.dataset.group;
+      ul.querySelectorAll("li").forEach(li => {
+        li.onmouseenter = () => describe(li);
+        li.onclick = () => {
+          activePick = group;
+          choose(group, li.dataset.value);
+          describe(li);
+        };
+      });
     });
+    $("menu").addEventListener("mouseleave", () => describe(document.querySelector(`.pk-list[data-group=${activePick}] li.on`)));
     $("ordersText").addEventListener("input", () => {
       U.settings.scenario = null;
       applySettingsToMenu();
@@ -132,11 +176,10 @@
   U.setSpeed = function (sec) {
     U.settings.speed = sec;
     P.setSpeed(sec);
-    const txt = `${sec.toFixed(2).replace(/0$/, "")} s/cycle`;
     $("speed").value = sec;
-    $("speedVal").textContent = txt;
+    $("speedVal").textContent = secs(sec);
     $("menuSpeed").value = sec;
-    $("menuSpeedVal").textContent = `${sec.toFixed(2).replace(/0$/, "")} s per cycle`;
+    $("menuSpeedVal").textContent = `${secs(sec)} per cycle`;
   };
 
   U.updateHud = function () {
@@ -150,9 +193,9 @@
   function setBadges(run) {
     const s = run.started;
     $("badges").innerHTML =
-      `<span class="badge"><i>CPU</i>${esc(s.scheduler)}</span>` +
-      `<span class="badge"><i>MEMORY</i>${esc(s.allocator.replace("_", " "))}</span>` +
-      `<span class="badge${s.unsafe_demo ? " warn" : ""}"><i>DEADLOCK PREVENTION</i>${s.unsafe_demo ? "OFF" : "ON"}</span>`;
+      `<span class="badge cpu"><i>CPU</i>${esc(s.scheduler)}</span>` +
+      `<span class="badge mem"><i>MEMORY</i>${esc(s.allocator.replace("_", " "))}</span>` +
+      `<span class="badge ${s.unsafe_demo ? "warn" : "on"}"><i>DEADLOCK PREVENTION</i>${s.unsafe_demo ? "OFF" : "ON"}</span>`;
   }
 
   function toggleDrawer(force) {
@@ -193,7 +236,8 @@
         else if (U.menuOpen()) U.closeMenu();
         return;
       }
-      if (U.menuOpen() || modalOpen) return;
+      if (U.menuOpen()) return menuKey(e);
+      if (modalOpen) return;
       const k = e.key.toLowerCase();
       if (k === " ") { e.preventDefault(); P.toggle(); }
       else if (k === "arrowright") P.step();
@@ -217,19 +261,39 @@
       Nr.describe(ev, { meta: run.meta, frame: cur, prev, run: run.started, events, index }));
   }
 
-  function lineHtml(n, cls) {
-    return `<li class="${cls || ""} k-${n.kind}"><span class="tag">${esc(n.tag)}</span>${esc(n.text)}</li>`;
-  }
+  /* The dialog box types the cycle's lines out, paced to the cycle length. */
+  let dialog = null;
 
   U.refreshCaption = function () {
     if (!P.run) return;
     const t = P.t;
     $("captionHead").textContent = `CYCLE ${t}`;
     const lines = narrationAt(t);
-    $("captionList").innerHTML = lines.length
-      ? lines.map(n => lineHtml(n)).join("")
-      : `<li class="quiet">${esc(t === 0 && !P.run.frames.length ? "" : Nr.quiet(P.frameAt(t)))}</li>`;
+    dialog = {
+      lines: lines.length ? lines : [{ text: Nr.quiet(P.frameAt(t)), tag: null, kind: "quiet" }],
+      start: performance.now(),
+      shown: -1,
+    };
+    dialog.total = dialog.lines.reduce((a, n) => a + n.text.length, 0);
+    U.tickDialog(performance.now());
     $("caption").scrollTop = 0;
+  };
+
+  U.tickDialog = function (now) {
+    if (!dialog) return;
+    const dur = Math.max(250, P.secPerCycle * 1000 * 0.55);
+    const chars = P.playing ? Math.floor((dialog.total * (now - dialog.start)) / dur) : dialog.total;
+    const shown = Math.min(dialog.total, chars);
+    if (shown === dialog.shown) return;
+    dialog.shown = shown;
+    let left = shown;
+    $("captionList").innerHTML = dialog.lines.map(n => {
+      const part = n.text.slice(0, Math.max(0, left));
+      left -= n.text.length;
+      if (!n.tag) return `<li class="quiet">${esc(part)}</li>`;
+      return `<li class="k-${n.kind}"><span class="tag">${esc(n.tag)}</span>${esc(part)}</li>`;
+    }).join("");
+    $("dialogMore").hidden = shown < dialog.total;
   };
 
   let loggedUpTo = -1;
@@ -260,18 +324,17 @@
     const F = P.frameAt(P.t);
     const rows = P.run.started.processes.map(m => {
       const p = F.byId[m.id];
-      const seats = F.pools.SPACE.map((o, i) => (o === m.id ? i : null)).filter(i => i !== null);
-      const tables = F.pools.TABLE.map((o, i) => (o === m.id ? i : null)).filter(i => i !== null);
+      const chairs = F.pools.SPACE.filter(o => o === m.id).length;
+      const tables = F.pools.TABLE.map((o, i) => (o === m.id ? `T${i + 1}` : null)).filter(Boolean);
       const equip = p.waits_for ? `waits ${p.waits_for}` + (p.holds.length ? `, holds ${p.holds.join(" ")}` : "")
                   : p.holds.join(" ");
-      const range = a => (a.length ? (a.length === 1 ? a[0] : `${a[0]}–${a[a.length - 1]}`) : "–");
       return `<tr><td><span class="swatch" style="background:${RV.Scene.colorOf(m.id)}"></span>${esc(m.id)}</td>` +
              `<td><span class="state st-${p.state}">${p.state.replace("BLOCKED_", "WAIT ")}</span></td>` +
-             `<td>${range(seats)}</td><td>${range(tables)}</td>` +
+             `<td>${chairs || "–"}</td><td>${tables.join(" ") || "–"}</td>` +
              `<td>${Math.floor(P.progress(m.id, P.t, P.phase))}/${m.service}</td><td>${esc(equip || "–")}</td></tr>`;
     });
     $("tab-orders").innerHTML =
-      `<table class="orders-table"><tr><th>ORDER</th><th>STATE</th><th>SEATS</th><th>TABLE</th><th>COOKED</th><th>MACHINES</th></tr>${rows.join("")}</table>`;
+      `<table class="orders-table"><tr><th>ORDER</th><th>STATE</th><th>CHAIRS</th><th>TABLE</th><th>COOKED</th><th>MACHINES</th></tr>${rows.join("")}</table>`;
   }
 
   /* ---------- results and deadlock ---------- */
@@ -295,7 +358,7 @@
     $("resultsTable").innerHTML = `<tr>${head.map(h => `<th>${h}</th>`).join("")}</tr>` +
       sorted.map(p => `<tr>${cols.map((c, i) => `<td>${i === 0 ? `<span class="swatch" style="background:${RV.Scene.colorOf(p.id)}"></span>` : ""}${esc(p[c])}</td>`).join("")}</tr>`).join("");
     $("poolTable").innerHTML = `<tr><th>POOL</th><th>SLOTS</th><th>PEAK</th><th>USE %</th><th>MAX FRAG</th></tr>` +
-      r.pools.map(p => `<tr><td>${p.id === "SPACE" ? "SEATS (SPACE)" : "TABLES (TABLE)"}</td><td>${p.capacity}</td><td>${p.peak_occupied}</td><td>${fmt(p.utilization_pct)}</td><td>${p.max_ext_frag_slots}</td></tr>`).join("");
+      r.pools.map(p => `<tr><td>${p.id === "SPACE" ? "CHAIRS (SPACE)" : "TABLES (TABLE)"}</td><td>${p.capacity}</td><td>${p.peak_occupied}</td><td>${fmt(p.utilization_pct)}</td><td>${p.max_ext_frag_slots}</td></tr>`).join("");
     $("resTable").innerHTML = r.resources.length
       ? `<tr><th>MACHINE</th><th>USES</th><th>WAITS</th><th>MAX USERS</th></tr>` +
         r.resources.map(x => `<tr><td>${esc(x.id.replace("_", " "))}</td><td>${x.acquisitions}</td><td>${x.wait_events}</td><td>${x.max_simultaneous_holders}</td></tr>`).join("")

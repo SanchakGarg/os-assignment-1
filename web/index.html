@@ -6,15 +6,15 @@
 <title>Smart Restaurant Simulator</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Jersey+10&family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <div id="app">
-  <header id="hud">
+  <header id="hud" class="pk-window">
     <div class="brand">SMART<br>RESTAURANT</div>
     <div class="clock" title="Simulated time: one cycle = one time unit">
-      <div class="clock-top"><span class="clock-label">CLOCK<br>CYCLE</span><span id="clockT">0</span><span id="clockEnd" class="muted">/ 0</span></div>
+      <div class="clock-top"><span class="clock-label">CYCLE</span><span id="clockT">0</span><span id="clockEnd" class="muted">/ 0</span></div>
       <div class="cycle-bar"><div id="cycleFill"></div></div>
     </div>
     <div class="controls">
@@ -26,7 +26,7 @@
     <label class="speed" title="How long one clock cycle lasts (− / +)">
       <span class="speed-label">CYCLE<br>LENGTH</span>
       <input id="speed" type="range" min="0.25" max="3" step="0.25" value="1">
-      <span id="speedVal">1.0 s/cycle</span>
+      <span id="speedVal">1 s</span>
     </label>
     <div class="badges" id="badges"></div>
     <div class="toggles">
@@ -38,9 +38,9 @@
 
   <main id="stage">
     <div id="sceneWrap"><canvas id="scene" aria-label="Restaurant scene"></canvas></div>
-    <aside id="drawer" hidden>
+    <aside id="drawer" class="pk-window" hidden>
       <div class="tabs">
-        <button data-tab="log" class="on">EVENT LOG</button>
+        <button data-tab="log" class="on">EVENTS</button>
         <button data-tab="orders">ORDERS</button>
         <button data-tab="legend">LEGEND</button>
       </div>
@@ -49,15 +49,15 @@
       <div id="tab-legend" class="tab" hidden>
         <h3>Who is who</h3>
         <dl class="legend">
-          <dt>Customers</dt><dd>One party per order. Party size = seats needed (SPACE_REQ). Shirt colour = the order's colour, used everywhere.</dd>
-          <dt>Sign "3s 2t"</dt><dd>The party needs 3 seats side by side and 2 tables side by side.</dd>
-          <dt>Street</dt><dd>The memory queue (FIFO). Only the head of the line is tried; if it doesn't fit, everyone behind it waits.</dd>
-          <dt>Seats 0–5</dt><dd>The SPACE pool. A party sits on adjacent seats. Yellow dashed boxes = free gaps, green box = the gap the allocator chose.</dd>
-          <dt>Tables T0–T2</dt><dd>The TABLE pool. A table in the order's colour belongs to it. 0 tables = takeaway (a paper bag).</dd>
-          <dt>Ready queue</dt><dd>Tickets in the order the scheduler will pick them. The highlighted line on each ticket is what the scheduler looks at.</dd>
+          <dt>Customers</dt><dd>One party per order. Party size = chairs needed (SPACE_REQ). Shirt colour = the order's colour, used everywhere.</dd>
+          <dt>Sign over a party</dt><dd>Chair icon + number = chairs needed side by side; table icon + number = tables needed side by side.</dd>
+          <dt>Outside</dt><dd>The memory queue (first in, first out). Only the head of the line, next to the door, is tried; if it doesn't fit, everyone behind it waits.</dd>
+          <dt>Waiting chairs</dt><dd>The SPACE pool, in the bottom-left corner. A party sits on chairs next to each other. Yellow dashed boxes = free gaps, green box = the gap the allocator chose.</dd>
+          <dt>Tables T1–T3</dt><dd>The TABLE pool. A table with the order's cloth and flag belongs to it. When the food is ready the party walks to its table, then leaves. 0 tables = takeaway (a paper bag from the counter).</dd>
+          <dt>Order board</dt><dd>The ready queue, in the order the scheduler will pick. The highlighted line on each ticket is what the scheduler looks at.</dd>
           <dt>Chefs</dt><dd>The 2 CPUs. The bubble shows the order being cooked and its progress. A chef walks to a machine while the order uses it.</dd>
           <dt>Machines</dt><dd>Shared resources, one user at a time. Light: green = free, red = in use, grey = not in this scenario. The badge shows the holder.</dd>
-          <dt>Red tags above a machine</dt><dd>Orders blocked waiting for that machine, first in line on the left. They keep their seats and anything they hold.</dd>
+          <dt>Red WAIT tags</dt><dd>Orders blocked waiting for that machine, first in line on top. They keep their chairs, tables and anything they hold.</dd>
           <dt>Wall clock</dt><dd>The hand sweeps once per clock cycle.</dd>
         </dl>
         <h3>Keys</h3>
@@ -70,73 +70,88 @@
     </aside>
   </main>
 
-  <section id="caption" aria-live="polite">
-    <div id="captionHead">CYCLE 0</div>
+  <section id="caption" class="pk-dialog" aria-live="polite">
+    <div id="captionHead" class="pk-nametag">CYCLE 0</div>
     <ul id="captionList"><li class="quiet">Pick a scenario and press START.</li></ul>
+    <span id="dialogMore" class="pk-more" hidden>▼</span>
   </section>
   <footer id="ganttWrap"><canvas id="gantt" aria-label="Timeline"></canvas></footer>
 </div>
 
 <div id="menu" class="modal">
-  <div class="panel menu">
-    <div class="menu-head">
+  <div class="menu">
+    <div class="pk-window menu-head">
       <div>
         <h1>SMART RESTAURANT</h1>
-        <p class="sub">A restaurant run like an operating system. Orders are <b>processes</b>, the 2 chefs are <b>CPUs</b>, seats and tables are <b>memory</b>, and kitchen machines are <b>shared resources</b>.</p>
+        <p class="sub">A restaurant run like an operating system. Orders are <b>processes</b>, the 2 chefs are <b>CPUs</b>, chairs and tables are <b>memory</b>, and kitchen machines are <b>shared resources</b>.</p>
       </div>
       <div class="server">
         <div><span id="srvDot" class="dot"></span><span id="srvText">connecting…</span></div>
         <div class="server-row"><input id="srvUrl" aria-label="Server address"><button id="srvConnect">CONNECT</button></div>
       </div>
     </div>
+
     <div class="menu-grid">
-      <section class="col">
-        <h2>1 · SCENARIO</h2>
-        <div id="scenarioList" class="scenario-list"></div>
-        <div class="file-row">
-          <label class="btn">UPLOAD .TXT<input type="file" id="fileInput" accept=".txt,text/plain" hidden></label>
-          <span class="hint">or edit the input below</span>
+      <div class="pk-window pick" data-pick="scenario">
+        <h2>SCENARIO</h2>
+        <ul id="scenarioList" class="pk-list" data-group="scenario"></ul>
+      </div>
+      <div class="settings">
+        <div class="pk-window pick" data-pick="scheduler">
+          <h2>CPU SCHEDULING</h2>
+          <ul class="pk-list" data-group="scheduler">
+            <li data-value="FCFS" data-desc="FCFS — First come, first served. A free chef cooks the order that arrived first. Simple and fair, but a long order makes everyone behind it wait.">FCFS</li>
+            <li data-value="PRIORITY" data-desc="PRIORITY — A free chef cooks the order with the lowest priority number (1 = VIP) first. It never interrupts a chef who is already cooking.">PRIORITY</li>
+            <li data-value="SJF" data-desc="SJF — Shortest job first. A free chef cooks the quickest order first, which lowers the average wait.">SJF</li>
+          </ul>
         </div>
-        <div class="editor"><pre id="lineNos" aria-hidden="true"></pre><textarea id="ordersText" spellcheck="false" aria-label="Orders input"></textarea></div>
-        <div id="inputError" class="error" hidden></div>
-      </section>
-      <section class="col">
-        <h2>2 · CPU SCHEDULING <small>who a free chef cooks next</small></h2>
-        <div class="choices" data-group="scheduler">
-          <button data-value="FCFS"><b>FCFS</b><span>First come, first served: the order that arrived first.</span></button>
-          <button data-value="PRIORITY"><b>PRIORITY</b><span>Lowest priority number first (1 = VIP). Never interrupts a chef.</span></button>
-          <button data-value="SJF"><b>SJF</b><span>Shortest job first: the quickest order to cook.</span></button>
+        <div class="pk-window pick" data-pick="allocator">
+          <h2>MEMORY ALLOCATION</h2>
+          <ul class="pk-list" data-group="allocator">
+            <li data-value="FIRST_FIT" data-desc="FIRST FIT — Seat the party in the first gap of chairs (and tables) that is big enough, scanning from the left.">FIRST FIT</li>
+            <li data-value="BEST_FIT" data-desc="BEST FIT — Use the smallest gap that is big enough, so the least space is left over.">BEST FIT</li>
+            <li data-value="WORST_FIT" data-desc="WORST FIT — Use the biggest gap, so the leftover piece stays as large as possible.">WORST FIT</li>
+          </ul>
         </div>
-        <h2>3 · MEMORY ALLOCATION <small>which adjacent seats and tables a party gets</small></h2>
-        <div class="choices" data-group="allocator">
-          <button data-value="FIRST_FIT"><b>FIRST FIT</b><span>The first gap that fits, scanning from seat 0.</span></button>
-          <button data-value="BEST_FIT"><b>BEST FIT</b><span>The smallest gap that fits, so the least is left over.</span></button>
-          <button data-value="WORST_FIT"><b>WORST FIT</b><span>The largest gap, leaving the biggest leftover.</span></button>
+        <div class="pk-window pick" data-pick="deadlock">
+          <h2>DEADLOCK</h2>
+          <ul class="pk-list" data-group="deadlock">
+            <li data-value="on" data-desc="PREVENTION ON — Machines are always taken in rank order: COFFEE, then MICROWAVE, then OVEN 1, then OVEN 2. An order that asks out of order first gives back what it holds (ROLLBACK), so a circle of waiting can never form.">PREVENTION ON</li>
+            <li data-value="off" data-desc="PREVENTION OFF — The unsafe demo. Requests run exactly as written, so two orders can end up waiting for each other forever. The server detects the circle and stops the run.">PREVENTION OFF</li>
+          </ul>
         </div>
-        <h2>4 · DEADLOCK HANDLING <small>for the kitchen machines</small></h2>
-        <div class="choices two" data-group="deadlock">
-          <button data-value="on"><b>PREVENTION ON</b><span>Machines are always taken in rank order: COFFEE &lt; MICROWAVE &lt; OVEN 1 &lt; OVEN 2. An out-of-order request rolls back first.</span></button>
-          <button data-value="off"><b>PREVENTION OFF</b><span>Unsafe demo: requests run exactly as written, so a circular wait can form. It is detected and the run stops.</span></button>
+        <div class="pk-window">
+          <h2>CYCLE LENGTH</h2>
+          <label class="speed-row"><input id="menuSpeed" type="range" min="0.25" max="3" step="0.25" value="1"><span id="menuSpeedVal">1 s per cycle</span></label>
         </div>
-        <h2>5 · CLOCK CYCLE LENGTH <small>how long one time unit lasts on screen</small></h2>
-        <label class="speed-row"><input id="menuSpeed" type="range" min="0.25" max="3" step="0.25" value="1"><span id="menuSpeedVal">1.0 s per cycle</span></label>
-        <button id="btnStart" class="start">▶ START SIMULATION</button>
-        <p id="startNote" class="hint"></p>
-      </section>
+      </div>
     </div>
+
+    <div class="pk-dialog menu-desc"><p id="menuDesc">Choose a scenario and the algorithms, then press START.</p><span class="pk-more">▼</span></div>
+
+    <div class="start-row">
+      <p id="startNote" class="hint">↑ ↓ choose · ← → switch window · Enter start</p>
+      <button id="btnStart" class="start">▶ START</button>
+    </div>
+
+    <details id="editorBox" class="pk-window editor-box">
+      <summary>ORDERS FILE <span class="hint">view, edit or upload the input</span></summary>
+      <div class="file-row">
+        <label class="btn">UPLOAD .TXT<input type="file" id="fileInput" accept=".txt,text/plain" hidden></label>
+        <span class="hint">Same format as ./restaurant: N, Q, the orders, then the optional machines and actions.</span>
+      </div>
+      <div class="editor"><pre id="lineNos" aria-hidden="true"></pre><textarea id="ordersText" spellcheck="false" aria-label="Orders input"></textarea></div>
+    </details>
+    <div id="inputError" class="error" hidden></div>
   </div>
 </div>
 
 <div id="results" class="modal" hidden>
-  <div class="panel results">
-    <h1>SERVICE COMPLETE</h1>
-    <p id="resultsSub" class="sub"></p>
-    <div id="summaryCards" class="cards"></div>
-    <h2>PER ORDER <small>all times in cycles</small></h2>
-    <div class="table-wrap"><table id="resultsTable"></table></div>
-    <div class="split">
-      <div><h2>MEMORY POOLS</h2><div class="table-wrap"><table id="poolTable"></table></div></div>
-      <div><h2>MACHINES</h2><div class="table-wrap"><table id="resTable"></table></div></div>
+  <div class="menu results">
+    <div class="pk-window">
+      <h1>SERVICE COMPLETE!</h1>
+      <p id="resultsSub" class="sub"></p>
+      <div id="summaryCards" class="cards"></div>
     </div>
     <div class="row-btns">
       <button id="btnCsv">DOWNLOAD CSV</button>
@@ -144,22 +159,34 @@
       <button id="btnExplore">KEEP EXPLORING</button>
       <button id="btnChange" class="primary">CHANGE SETTINGS</button>
     </div>
+    <div class="pk-window">
+      <h2>PER ORDER <small>all times in cycles</small></h2>
+      <div class="table-wrap"><table id="resultsTable"></table></div>
+    </div>
+    <div class="split">
+      <div class="pk-window"><h2>CHAIRS AND TABLES</h2><div class="table-wrap"><table id="poolTable"></table></div></div>
+      <div class="pk-window"><h2>MACHINES</h2><div class="table-wrap"><table id="resTable"></table></div></div>
+    </div>
   </div>
 </div>
 
 <div id="deadlockModal" class="modal" hidden>
-  <div class="panel deadlock">
-    <h1>DEADLOCK DETECTED</h1>
-    <p id="dlMessage" class="sub"></p>
-    <div id="dlCycle" class="cycle"></div>
-    <h2>ALL FOUR CONDITIONS HOLD</h2>
-    <ul class="conditions">
-      <li><b>Mutual exclusion:</b> each machine serves one order at a time.</li>
-      <li><b>Hold and wait:</b> each order keeps one machine while it waits for another.</li>
-      <li><b>No preemption:</b> a machine is never taken away from its holder.</li>
-      <li><b>Circular wait:</b> the orders wait for each other in a circle (above).</li>
-    </ul>
-    <p class="sub">The server found the cycle in the wait-for graph, stopped every worker thread and ended the run. With prevention ON, an order that asks for a lower-ranked machine while holding a higher one gives it back first (ROLLBACK), so the circle can never close.</p>
+  <div class="menu deadlock">
+    <div class="pk-dialog danger">
+      <h1>DEADLOCK DETECTED!</h1>
+      <p id="dlMessage" class="sub"></p>
+      <div id="dlCycle" class="cycle"></div>
+    </div>
+    <div class="pk-window">
+      <h2>ALL FOUR CONDITIONS HOLD</h2>
+      <ul class="conditions">
+        <li><b>Mutual exclusion:</b> each machine serves one order at a time.</li>
+        <li><b>Hold and wait:</b> each order keeps one machine while it waits for another.</li>
+        <li><b>No preemption:</b> a machine is never taken away from its holder.</li>
+        <li><b>Circular wait:</b> the orders wait for each other in a circle (above).</li>
+      </ul>
+      <p class="sub">The server found the cycle in the wait-for graph, stopped every worker thread and ended the run. With prevention ON, an order that asks for a lower-ranked machine while holding a higher one gives it back first (ROLLBACK), so the circle can never close.</p>
+    </div>
     <div class="row-btns">
       <button id="dlExplore">LOOK AT THE KITCHEN</button>
       <button id="dlRerun" class="primary">RE-RUN WITH PREVENTION ON</button>

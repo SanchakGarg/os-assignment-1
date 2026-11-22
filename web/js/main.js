@@ -66,6 +66,7 @@
     Sc.render(now / 1000);
     G.render();
     U.updateHud();
+    U.tickDialog(now);
     requestAnimationFrame(loop);
   }
 
