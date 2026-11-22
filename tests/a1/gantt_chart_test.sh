@@ -2,7 +2,7 @@
 set -eu
 
 make >/dev/null
-./gantt_chart tests/edge >/tmp/gantt_chart_test.out
+./gantt_chart tests/a1/edge >/tmp/gantt_chart_test.out
 
 grep -q "Gantt" /tmp/gantt_chart_test.out
 

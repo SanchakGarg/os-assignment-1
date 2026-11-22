@@ -1,6 +1,6 @@
 /* Unit tests for first_fit(). Run: make test */
 #include <stdio.h>
-#include "first_fit.h"
+#include "memory.h"
 
 static int failures = 0;
 
@@ -56,7 +56,39 @@ int main(void)
     CHECK(first_fit(table, 3, 2), -1);
     CHECK(first_fit(table, 3, 3), -1);
 
+    /* Best Fit: smallest run that fits. [_ _ _ X _ X] size 1 -> the 1-slot hole */
+    CHECK(best_fit(mixed, 6, 1), 4);
+    CHECK(best_fit(mixed, 6, 2), 0);            /* only the 3-slot run fits */
+    CHECK(best_fit(holes, 6, 1), 1);            /* [X _ X _ _ X]: 1-slot hole */
+    CHECK(best_fit(holes, 6, 2), 3);
+    CHECK(best_fit(equal, 6, 2), 0);            /* equal runs -> lowest slot */
+    CHECK(best_fit(full, 6, 1), -1);
+    CHECK(best_fit(empty, 6, 6), 0);
+    CHECK(best_fit(empty, 6, 0), 0);
+
+    /* Worst Fit: largest run. */
+    CHECK(worst_fit(holes, 6, 1), 3);           /* 2-slot hole beats 1-slot hole */
+    CHECK(worst_fit(mixed, 6, 1), 0);
+    CHECK(worst_fit(equal, 6, 1), 0);           /* equal runs -> lowest slot */
+    CHECK(worst_fit(holes, 6, 3), -1);          /* 3 free, but not adjacent */
+    CHECK(worst_fit(full, 6, 1), -1);
+    CHECK(worst_fit(empty, 6, 0), 0);
+
+    /* Pool helpers: [_ _ A _ B B] -> 3 free, largest run 2, fragmentation 1 */
+    Pool pool;
+    pool_init(&pool, "SPACE", 6);
+    pool_take(&pool, 2, 1, "A");
+    pool_take(&pool, 4, 2, "B");
+    CHECK(pool_used(&pool), 3);
+    CHECK(pool_ext_frag(&pool), 1);
+    pool_release(&pool, 2, 1);                  /* [_ _ _ _ B B]: holes merge */
+    CHECK(pool_ext_frag(&pool), 0);
+    CHECK(first_fit(pool.slots, 6, 4), 0);
+    pool_release(&pool, 4, 2);
+    CHECK(pool_used(&pool), 0);                 /* empty pool: no fragmentation */
+    CHECK(pool_ext_frag(&pool), 0);
+
     if (failures == 0)
-        printf("test_first_fit: all tests passed\n");
+        printf("test_memory: all tests passed\n");
     return failures == 0 ? 0 : 1;
 }

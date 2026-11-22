@@ -19,6 +19,9 @@ int read_input(const char *file, Process *p, int *n, int *q)
             return -1;
         }
         p[i].remaining = p[i].service;   /* nothing cooked yet */
+        p[i].space_req = p[i].table_req = 0;   /* A1 orders need no slots */
+        p[i].space_at = p[i].table_at = 0;
+        p[i].mem_admit = -1;
         p[i].start = -1;                 /* not started yet */
         p[i].state = NEW;
     }

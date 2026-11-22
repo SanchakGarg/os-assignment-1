@@ -1,14 +1,10 @@
 /*
- * shared_types.h -- PROVISIONAL shared types for the Smart Restaurant project.
+ * shared_types.h -- types shared by the parser, simulator and CSV writer:
+ * the parsed input (Workload), the run settings (SimulationConfig) and the
+ * calculated results (SimulationResult). Field names follow shared-data.md
+ * section 2.
  *
- * Owner of the real header: Sanchak (see docs/shared-data.md).
- * Anam wrote this temporary copy so the parser and CSV writer can be built and
- * tested before the shared header lands. Field names follow shared-data.md
- * section 2 exactly. When Sanchak pushes the real header, delete this file
- * and include his; only the names below are relied on.
- *
- * Return convention used by Anam's modules: 0 = success, -1 = error
- * (details in Error).
+ * Return convention: 0 = success, -1 = error (details in Error).
  */
 #ifndef SHARED_TYPES_H
 #define SHARED_TYPES_H
@@ -44,14 +40,14 @@ typedef struct {
     int           n;          /* number of processes */
     int           q;          /* RR quantum (read, unused by Restaurant schedulers) */
     ProcessInput *processes;  /* n entries, heap-allocated; free with workload_free */
-    /* Sanchak adds resource definitions/actions here for A3. */
+    /* A3: resource definitions/actions go here. */
 } Workload;
 
 typedef struct {
     SchedulerKind scheduler;
     AllocatorKind allocator;
     Phase         phase;
-    /* Sanchak adds unsafe-demo mode / prevention policy for A3. */
+    /* A3: unsafe-demo mode / prevention policy go here. */
 } SimulationConfig;
 
 /* Final per-process result (shared-data.md section 2). */

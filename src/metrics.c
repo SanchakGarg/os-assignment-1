@@ -130,6 +130,79 @@ static void print_pretty(const Process *p, int n, const Summary *s, const char *
     rule("└", "┴", "┘", sw, 2);
 }
 
+static void pool_result(PoolResult *r, const Pool *pool, int elapsed)
+{
+    snprintf(r->id, sizeof r->id, "%s", pool->name);
+    r->capacity = pool->capacity;
+    r->peak_occupied = pool->peak_occupied;
+    r->utilization_pct = (double)pool->occupied_time / ((double)pool->capacity * elapsed) * 100;
+    r->max_ext_frag_slots = pool->max_ext_frag;
+}
+
+/*
+ * A2 results (spec section 7). For order i with arrival A, memory admission M,
+ * first start S, completion C and service B:
+ *   turnaround = C - A, response = S - A, waiting = C - A - B,
+ *   memory wait = M - A, ready wait = waiting - memory wait.
+ * E = last completion - first arrival; throughput = N / E;
+ * chef utilization = sum(B) / (2E); pool utilization = occupied slot-time / (KE).
+ * Returns 0, or -1 if out of memory.
+ */
+int collect_results(const Process *p, int n, const Memory *mem, SimulationResult *out)
+{
+    memset(out, 0, sizeof *out);
+    out->processes = calloc((size_t)n, sizeof *out->processes);
+    if (!out->processes) return -1;
+    out->process_count = n;
+
+    double total_wait = 0, total_turn = 0, total_resp = 0, total_mem = 0, busy = 0;
+    int first_arrival = p[0].arrival, last_completion = 0, blocked = 0;
+
+    for (int i = 0; i < n; i++) {
+        ProcessResult *r = &out->processes[i];
+        snprintf(r->id, sizeof r->id, "%s", p[i].id);
+        r->arrival = p[i].arrival;
+        r->priority = p[i].priority;
+        r->service = p[i].service;
+        r->start = p[i].start;
+        r->completion = p[i].completion;
+        r->mem_admit = p[i].mem_admit;
+        r->turnaround = turnaround(&p[i]);
+        r->waiting = waiting(&p[i]);
+        r->response = response(&p[i]);
+        r->mem_wait = p[i].mem_admit - p[i].arrival;
+        r->ready_wait = r->waiting - r->mem_wait;
+        r->resource_wait = 0;
+
+        total_wait += r->waiting;
+        total_turn += r->turnaround;
+        total_resp += r->response;
+        total_mem += r->mem_wait;
+        busy += p[i].service;
+        if (r->mem_wait > 0) blocked++;   /* did not get its slots on arrival */
+        if (p[i].arrival < first_arrival) first_arrival = p[i].arrival;
+        if (p[i].completion > last_completion) last_completion = p[i].completion;
+    }
+
+    int elapsed = last_completion - first_arrival;   /* E > 0: every SERVICE >= 1 */
+    SummaryResult *s = &out->summary;
+    s->average_waiting = total_wait / n;
+    s->average_turnaround = total_turn / n;
+    s->average_response = total_resp / n;
+    s->average_memory_wait = total_mem / n;
+    s->throughput = (double)n / elapsed;
+    s->service_utilization_pct = busy / (CHEFS * elapsed) * 100;
+    s->completed_count = n;
+    s->blocked_for_memory_count = blocked;
+
+    pool_result(&out->pools[0], &mem->space, elapsed);
+    pool_result(&out->pools[1], &mem->table, elapsed);
+
+    out->checks.completed_count = n;   /* A3 CHECK rows; no resources yet */
+    out->complete = 1;
+    return 0;
+}
+
 /* pretty: formatted tables for a terminal; otherwise the exact CSV report. */
 void print_results(Process *p, int n, int pretty, const char *file, const char *algorithm)
 {

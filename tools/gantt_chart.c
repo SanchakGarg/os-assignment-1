@@ -215,7 +215,7 @@ int main(int argc, char **argv)
 {
     char files[MAX_FILES][256];
     const char *algorithms[] = {"FCFS", "PRIORITY", "SJF"};
-    const char *path = "tests/edge";
+    const char *path = "tests/a1/edge";
     struct stat st;
     int file_count = 0;
 
