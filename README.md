@@ -70,20 +70,7 @@ sh tests/gantt_chart_test.sh    # Gantt chart generator checks
  
 Exit codes: `0` success, `1` bad arguments, `2` invalid input, `3` simulation failed, `4` result file could not be written. Errors go to the terminal, never into the result file.
  
-### A1 (unchanged)
- 
-```
-./restaurant INPUT_FILE ALGORITHM
-```
- 
-`ALGORITHM` is one of `FCFS`, `PRIORITY`, `SJF`. This form keeps the A1 behaviour, so the A1 tests and `gantt_chart` work as before. Its output was checked byte-for-byte against the A1 build on `tests/comparison.txt` for all three algorithms.
- 
-```
-./restaurant tests/edge/all_same_time.txt FCFS
-sh tests/edge/check_rows.sh     # every edge case, every algorithm, vs expected rows
-sh tests/gantt_chart_test.sh    # Gantt chart generator checks
-./gantt_chart tests/edge        # text Gantt charts, one block per input (all algorithms)
-```
+
  
 ## A2 input format
  
