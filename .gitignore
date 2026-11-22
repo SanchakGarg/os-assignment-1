@@ -1,0 +1,10 @@
+restaurant
+gantt_chart
+check_input
+tests/bin/
+results/
+*.tmp
+*.o
+.DS_Store
+restaurant_server
+build/
