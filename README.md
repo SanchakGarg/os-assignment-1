@@ -143,7 +143,7 @@ The page shows the restaurant as one room seen from above, drawn in the style of
 - the kitchen in the top-left corner, with the two chefs and the machines;
 - the order board on the back wall;
 - 6 waiting chairs in the bottom-left corner;
-- 3 tables in the middle, labelled T1, T2, T3;
+- 3 tables in a triangle in the middle of the hall, labelled T1, T2, T3: T1 bottom-left, T2 at the top, T3 bottom-right. A dotted runner links the neighbouring pairs T1–T2 and T2–T3, so it shows which tables count as adjacent;
 - the door, with the street outside where the line forms.
 
 The start menu uses windows with a ▶ cursor:

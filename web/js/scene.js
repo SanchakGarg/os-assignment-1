@@ -25,20 +25,26 @@
   const MACH_Y = 24, WALL_H = 56, CHEF_Y = 100;
   const COUNTER_Y = 112, COUNTER_X = 216;                /* L-shaped counter closing the kitchen */
   const BOARD = { x: 252, y: 4, w: 204, h: 50 }, SLOT_W = 28, SLOTS = 7;
-  const TABLE_Y = 140, TABLE_W = 48;
+  const TABLE_W = 48;
   const CHAIR_Y = 168;
   const WALL_Y = 208, OUT_Y = 222, PATH_Y = 252;
   const DOOR = { x: 248, w: 32 };
   const DOOR_OUT = { x: 264, y: PATH_Y }, DOOR_IN = { x: 264, y: 200 }, AISLE_Y = 200;
   const SPAWN = { x: 540, y: PATH_Y }, EXIT = { x: 548, y: PATH_Y + 3 };
-  const PICKUP = { x: 242, y: 140 };                     /* takeaway bags at the counter end */
+  const PICKUP = { x: 240, y: 100 };                     /* takeaway bags at the counter end */
   const QUEUE_RIGHT = 238, QUEUE_LEFT = 8;
 
-  let chairDX = 20, tableDX = 80;
+  /* Tables stand in a triangle in the middle of the hall: T1 bottom-left, T2 at
+   * the top, T3 bottom-right. Left to right is still pool order, so the
+   * adjacent pairs are T1-T2 and T2-T3 (a dotted runner links them). */
+  const TRIANGLE = [{ x: 254, y: 138 }, { x: 326, y: 76 }, { x: 398, y: 138 }];
+  let tableSpots = TRIANGLE;
+
+  let chairDX = 20;
   const chairX = i => 16 + i * chairDX;
-  const tableX = j => 208 + j * tableDX;
+  const tablePos = j => tableSpots[j];
   const seatSpot = i => ({ x: chairX(i) + 8, y: CHAIR_Y + 12, zone: "seat" });
-  const tableFront = j => ({ x: tableX(j) + TABLE_W / 2, y: TABLE_Y + 50 });
+  const tableFront = j => ({ x: tablePos(j).x + TABLE_W / 2, y: tablePos(j).y + 50 });
   const stationSpot = key => ({ x: MACH_X[key] + 16, y: CHEF_Y });
   const tableName = j => `T${j + 1}`;
 
@@ -82,7 +88,8 @@
   Sc.setPools = function (pools) {
     Sc.pools = pools;
     chairDX = Math.min(20, Math.floor(130 / pools.SPACE));
-    tableDX = Math.min(80, Math.floor(240 / pools.TABLE));
+    const n = pools.TABLE, dx = Math.min(70, Math.floor(220 / n));
+    tableSpots = n === 3 ? TRIANGLE : Array.from({ length: n }, (_, j) => ({ x: 240 + j * dx, y: 138 }));
     bg = null;
   };
 
@@ -325,9 +332,17 @@
     BOX(g, 6, 158, 144, 40, "#e8c860");
     R(g, 9, 161, 138, 34, "#d05050");
     for (let x = 12; x < 146; x += 8) R(g, x, 163, 4, 2, "#f0a0a0"), R(g, x, 191, 4, 2, "#f0a0a0");
-    BOX(g, 194, 128, 248, 56, "#e8c860");
-    R(g, 197, 131, 242, 50, "#5878c8");
-    for (let x = 200; x < 438; x += 8) R(g, x, 133, 4, 2, "#a8c0f0"), R(g, x, 177, 4, 2, "#a8c0f0");
+    BOX(g, 242, 64, 216, 118, "#e8c860");
+    R(g, 245, 67, 210, 112, "#5878c8");
+    for (let x = 248; x < 452; x += 8) R(g, x, 69, 4, 2, "#a8c0f0"), R(g, x, 175, 4, 2, "#a8c0f0");
+    // dotted runner between neighbouring tables (the pool's adjacency)
+    for (let j = 0; j + 1 < tableSpots.length; j++) {
+      const a = tableSpots[j], b = tableSpots[j + 1];
+      const ax = a.x + TABLE_W / 2, ay = a.y + 10, bx = b.x + TABLE_W / 2, by = b.y + 10;
+      const steps = Math.floor(Math.hypot(bx - ax, by - ay) / 7);
+      for (let k = 1; k < steps; k++)
+        R(g, Math.round(ax + ((bx - ax) * k) / steps) - 1, Math.round(ay + ((by - ay) * k) / steps) - 1, 3, 3, "#f8e088");
+    }
     Sp.plant(g, 0, 182);
     // bottom wall with the door
     R(g, 0, WALL_Y, W, OUT_Y - WALL_Y, "#c89060");
@@ -467,8 +482,13 @@
     ctx.fillStyle = "#181c28";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(world, ox, oy, W * scale, H * scale);
+    ctx.save();                                   /* nothing spills outside the room */
+    ctx.beginPath();
+    ctx.rect(ox, oy, W * scale, H * scale);
+    ctx.clip();
     drawLabels();
     drawOverlay();
+    ctx.restore();
   };
 
   function drawKitchen(run, prev, cur, declared, t, phase, now) {
@@ -574,13 +594,13 @@
 
     // tables with their name plates, cloths and flags
     for (let j = 0; j < table.length; j++) {
-      const x = tableX(j), o = table[j];
-      Sp.table(wctx, x, TABLE_Y, o ? Sc.colorOf(o) : null);
-      BOX(wctx, x + 17, TABLE_Y + 13, 14, 7, "#fbfbff");
-      label(tableName(j), x + 24, TABLE_Y + 14.2, { size: 3.6, color: "#283040" });
+      const { x, y } = tablePos(j), o = table[j];
+      Sp.table(wctx, x, y, o ? Sc.colorOf(o) : null);
+      BOX(wctx, x + 17, y + 13, 14, 7, "#fbfbff");
+      label(tableName(j), x + 24, y + 14.2, { size: 3.6, color: "#283040" });
       if (o) {
-        Sp.flag(wctx, x + 38, TABLE_Y - 9, Sc.colorOf(o));
-        label(o, x + 16, TABLE_Y + 4, { size: 4, color: Sp.ink(Sc.colorOf(o)) });
+        Sp.flag(wctx, x + 38, y - 9, Sc.colorOf(o));
+        label(o, x + 16, y + 4, { size: 4, color: Sp.ink(Sc.colorOf(o)) });
       }
     }
     // chairs in the corner, tinted under their owner
@@ -658,13 +678,26 @@
       const c = prev.chefs.indexOf(id);
       const start = c >= 0 ? stationSpot(prev.chefAt[c]) : { x: BOARD.x + 20, y: 60 };
       const tables = slotsOf(prev.pools.TABLE, id);
-      const target = tables.length ? { x: tableX(tables[0]) + 18, y: TABLE_Y + 4 } : { x: COUNTER_X + 3, y: COUNTER_Y - 6 };
+      const target = tables.length ? { x: tablePos(tables[0]).x + 18, y: tablePos(tables[0]).y + 4 } : { x: COUNTER_X + 3, y: COUNTER_Y - 6 };
       const p = along({ pts: [{ x: start.x - 6, y: start.y - 30 }, target], win: [0, 0.15] }, phase);
       wctx.globalAlpha = phase > 0.42 ? clamp01((0.5 - phase) / 0.08) : 1;
       if (tables.length) Sp.dish(wctx, Math.round(p.x), Math.round(p.y));
       else if (phase < 0.3) Sp.bag(wctx, Math.round(p.x), Math.round(p.y));
       wctx.globalAlpha = 1;
     }
+  }
+
+  /* Outline(s) for a run of slots: one box over a run of chairs, one box per
+   * table (they stand in a triangle, not a row). */
+  function runBoxes(name, start, size) {
+    if (name === "SPACE") {
+      const x = chairX(start) - 2;
+      return [{ x, y: CHAIR_Y - 10, w: chairX(start + size - 1) + 18 - x, h: 32 }];
+    }
+    return Array.from({ length: size }, (_, k) => {
+      const p = tablePos(start + k);
+      return { x: p.x - 4, y: p.y - 12, w: TABLE_W + 8, h: 44 };
+    });
   }
 
   /* Free gaps (dashed) and the gap the allocator picked (solid), per admission. */
@@ -676,19 +709,19 @@
       const w0 = 0.3 + k * span, w1 = w0 + span;
       if (phase < w0 || phase >= w1) return;
       const later = new Set(admits.slice(k).map(e => e.process_id));
-      for (const [name, x0, dx, w, y, h] of [["SPACE", chairX(0) - 2, chairDX, 20, CHAIR_Y - 10, 32],
-                                             ["TABLE", tableX(0) - 4, tableDX, TABLE_W + 8, TABLE_Y - 12, 44]]) {
+      for (const name of ["SPACE", "TABLE"]) {
         const before = cur.pools[name].map(o => (later.has(o) ? null : o));
         const mine = slotsOf(cur.pools[name], ev.process_id);
         if (!mine.length) continue;
         for (const hole of holes(before)) {
-          const hx = x0 + hole.start * dx, hw = (hole.size - 1) * dx + w;
-          overlay.push({ type: "box", x: hx, y, w: hw, h, color: "#f0c020", dash: true });
-          overlay.push({ type: "text", text: `GAP ${hole.size}`, x: hx + hw / 2, y: y + 1, color: "#283040", size: 3, bg: "#fff0a0", border: "#283040" });
+          const boxes = runBoxes(name, hole.start, hole.size);
+          boxes.forEach(b => overlay.push({ type: "box", x: b.x, y: b.y, w: b.w, h: b.h, color: "#f0c020", dash: true }));
+          overlay.push({ type: "text", text: `GAP ${hole.size}`, x: boxes[0].x + boxes[0].w / 2, y: boxes[0].y + 1, color: "#283040", size: 3, bg: "#fff0a0", border: "#283040" });
         }
-        const cx = x0 + mine[0] * dx, cw = (mine.length - 1) * dx + w;
-        overlay.push({ type: "box", x: cx - 1, y: y - 1, w: cw + 2, h: h + 2, color: "#30c050" });
-        overlay.push({ type: "text", text: `${P.run.started.allocator.replace("_", " ")} → ${ev.process_id}`, x: cx + cw / 2, y: y + h + 2, color: "#ffffff", size: 3.2, bg: "#30a048", border: "#283040" });
+        const chosen = runBoxes(name, mine[0], mine.length);
+        chosen.forEach(b => overlay.push({ type: "box", x: b.x - 1, y: b.y - 1, w: b.w + 2, h: b.h + 2, color: "#30c050" }));
+        const c0 = chosen[0];
+        overlay.push({ type: "text", text: `${P.run.started.allocator.replace("_", " ")} → ${ev.process_id}`, x: c0.x + c0.w / 2, y: c0.y + c0.h + 2, color: "#ffffff", size: 3.2, bg: "#30a048", border: "#283040" });
       }
     });
   }
@@ -703,12 +736,13 @@
 
     label("KITCHEN · 2 CHEFS = 2 CPUS · MACHINES = SHARED RESOURCES", 6, COUNTER_Y + 10, { size: 2.8, color: "#fff8e8", align: "left" });
     const chairsMid = chairX(0) + (chairDX * Sc.pools.SPACE) / 2 - 2;
-    const tablesMid = tableX(0) + (tableDX * (Sc.pools.TABLE - 1) + TABLE_W) / 2;
+    const tablesMid = tableSpots.reduce((a, p) => a + p.x, 0) / tableSpots.length + TABLE_W / 2;
+    const tablesLow = Math.max(...tableSpots.map(p => p.y));
     const sp = run ? cur.pools.SPACE : new Array(Sc.pools.SPACE).fill(null);
     const tb = run ? cur.pools.TABLE : new Array(Sc.pools.TABLE).fill(null);
     const info = pool => (run && phase < 0.4 ? "" : ` · ${pool.filter(o => o === null).length} FREE, GAP ${holes(pool).reduce((a, h) => Math.max(a, h.size), 0)}`);
     label(`CHAIRS = SPACE POOL${info(sp)}`, chairsMid, CHAIR_Y - 19, { size: 2.8, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.8 });
-    label(`TABLES = TABLE POOL${info(tb)}`, tablesMid, TABLE_Y - 21, { size: 2.8, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.8 });
+    label(`TABLES = TABLE POOL${info(tb)}`, tablesMid, tablesLow + 34, { size: 2.8, color: "#fff", bg: "rgba(40,48,64,0.85)", pad: 0.8 });
     label("RESTAURANT", 315, 227.5, { size: 2.7, color: "#4a2810" });
     label("OUTSIDE = MEMORY QUEUE (FIFO)", 330, H - 9, { size: 2.8, color: "#1c4010", align: "left" });
     if (run && cur.queues.memory.length) label("◀ HEAD", QUEUE_RIGHT + 2, PATH_Y + 3, { size: 2.6, color: "#4a2810", align: "left" });
@@ -738,7 +772,7 @@
         x = s.length ? (chairX(s[0]) + chairX(s[s.length - 1]) + 16) / 2 : 80; y = CHAIR_Y - 2; text = `${id} ${text}`;
       } else if (ev.type === "COMPLETE") {
         const tb = slotsOf(prev.pools.TABLE, id);
-        x = tb.length ? tableX(tb[0]) + TABLE_W / 2 : PICKUP.x; y = TABLE_Y - 12; text = `${id} ${text}`;
+        x = tb.length ? tablePos(tb[0]).x + TABLE_W / 2 : PICKUP.x; y = tb.length ? tablePos(tb[0]).y - 12 : PICKUP.y - 30; text = `${id} ${text}`;
       } else if (ev.type === "DISPATCH" || ev.type === "RESOURCE_BLOCK") {
         const F = ev.type === "DISPATCH" ? cur : prev;
         const spot = stationSpot(F.chefAt[ev.chef_id] || "stove" + ev.chef_id);
